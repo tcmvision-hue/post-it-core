@@ -1,63 +1,169 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import Frontpage from "./ui/home/Frontpage";
+/* UI – HOME */
+import Welcome from "./ui/home/Welcome";
+import Explanation from "./ui/home/Explanation";
 import Today from "./ui/home/Today";
+
+/* INTAKE */
 import Intake from "./ui/home/Intake";
-import Reflection from "./ui/home/Reflection";
-import Direction from "./ui/home/Direction";
+
+/* REFLECTION */
+import Reflection from "./ui/components/Reflection/Reflection";
+
+/* GENERATION */
+import Generation from "./ui/home/Generation";
+import SelectPost from "./ui/home/SelectPost";
 import Output from "./ui/home/Output";
 
 const PHASES = {
-  FRONT: "FRONT",
+  WELCOME: "WELCOME",
+  EXPLANATION: "EXPLANATION",
   TODAY: "TODAY",
   INTAKE: "INTAKE",
-  REFLECTION: "REFLECTION",
-  DIRECTION: "DIRECTION",
-  OUTPUT: "OUTPUT",
+  GENERATION: "GENERATION",
+  SELECT: "SELECT",
+  FINAL: "FINAL",
+  PACKAGES: "PACKAGES",
+  FINISHED: "FINISHED",
 };
 
 export default function App() {
-  const [phase, setPhase] = useState(PHASES.FRONT);
+  const [phase, setPhase] = useState(PHASES.WELCOME);
 
-  // ============================
-  // CANONISCHE AUTOMATISCHE FLOW
-  // ============================
-  useEffect(() => {
-    let timer;
+  const [intake, setIntake] = useState(null);
+  const [generations, setGenerations] = useState([]);
+  const [selectedPost, setSelectedPost] = useState("");
 
-    if (phase === PHASES.FRONT) {
-      timer = setTimeout(() => setPhase(PHASES.TODAY), 1500);
-    }
+  // ⬇️ Alleen visuele timing
+  const [showGeneration, setShowGeneration] = useState(false);
 
-    if (phase === PHASES.TODAY) {
-      timer = setTimeout(() => setPhase(PHASES.INTAKE), 1500);
-    }
+  /* HOME */
+  if (phase === PHASES.WELCOME) {
+    return <Welcome onContinue={() => setPhase(PHASES.EXPLANATION)} />;
+  }
 
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [phase]);
+  if (phase === PHASES.EXPLANATION) {
+    return <Explanation onContinue={() => setPhase(PHASES.TODAY)} />;
+  }
 
-  // ============================
-  // RENDER PER FASE (CANON)
-  // ============================
-  if (phase === PHASES.FRONT) return <Frontpage />;
-
-  if (phase === PHASES.TODAY) return <Today />;
+  if (phase === PHASES.TODAY) {
+    return <Today onContinue={() => setPhase(PHASES.INTAKE)} />;
+  }
 
   if (phase === PHASES.INTAKE) {
-    return <Intake onComplete={() => setPhase(PHASES.REFLECTION)} />;
+    return (
+      <Intake
+        onComplete={(data) => {
+          setIntake(data);
+          setGenerations([]);
+          setShowGeneration(false);
+          setPhase(PHASES.GENERATION);
+        }}
+      />
+    );
   }
 
-  if (phase === PHASES.REFLECTION) {
-    return <Reflection onComplete={() => setPhase(PHASES.DIRECTION)} />;
+  /* GENERATION */
+  if (phase === PHASES.GENERATION) {
+    return (
+      <>
+        {/* Generation staat klaar, maar is eerst onzichtbaar */}
+        <div
+          style={{
+            opacity: showGeneration ? 1 : 0,
+            transition: "opacity 1200ms ease",
+          }}
+        >
+          <Generation
+            kladblok={intake?.kladblok}
+            doelgroep={intake?.doelgroep}
+            intentie={intake?.intentie}
+            waaromNu={intake?.context}
+            generations={generations}
+            onGenerate={(post) =>
+              setGenerations((prev) => [...prev, post])
+            }
+            onStop={() => {
+              const finalPost =
+                generations[generations.length - 1] || "";
+              setSelectedPost(finalPost);
+              setPhase(PHASES.FINAL);
+            }}
+          />
+        </div>
+
+        {/* Reflection bovenop */}
+        <Reflection
+          onFadeOutStart={() => {
+            // ⬅️ BELANGRIJK: generatie zichtbaar TIJDENS fade
+            setShowGeneration(true);
+          }}
+        />
+      </>
+    );
   }
 
-  if (phase === PHASES.DIRECTION) {
-    return <Direction onComplete={() => setPhase(PHASES.OUTPUT)} />;
+  /* SELECT */
+  if (phase === PHASES.SELECT) {
+    return (
+      <SelectPost
+        posts={generations}
+        onSelect={(post) => {
+          setSelectedPost(post || "");
+          setPhase(PHASES.FINAL);
+        }}
+      />
+    );
   }
 
-  if (phase === PHASES.OUTPUT) return <Output />;
+  /* FINAL */
+  if (phase === PHASES.FINAL) {
+    return (
+      <Output
+        post={selectedPost}
+        onViewPackages={() => setPhase(PHASES.PACKAGES)}
+        onFinishSession={() => setPhase(PHASES.FINISHED)}
+      />
+    );
+  }
 
-  return <div>Onbekende fase</div>;
+  /* PACKAGES */
+  if (phase === PHASES.PACKAGES) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 32,
+          fontWeight: "bold",
+        }}
+      >
+        PAKKETTEN
+      </div>
+    );
+  }
+
+  /* EINDSCHERM */
+  if (phase === PHASES.FINISHED) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#F6F3EE",
+        }}
+      >
+        <h1 style={{ marginBottom: 24 }}>POST THIS</h1>
+        <p>Bedankt voor het gebruiken van POST THIS.</p>
+      </div>
+    );
+  }
+
+  return null;
 }

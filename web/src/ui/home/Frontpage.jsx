@@ -1,35 +1,44 @@
-import desktopImage from "../../assets/frontpage-desktop-16x9.jpg";
-import mobileImage from "../../assets/frontpage-mobile-9x16.jpg";
-
-export default function Frontpage() {
+export default function FrontPage({ onContinue }) {
   return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        overflow: "hidden",
-        backgroundColor: "#000",
-      }}
-    >
-      <picture>
-        {/* Mobiel 9:16 */}
-        <source
-          media="(max-width: 768px)"
-          srcSet={mobileImage}
-        />
+    <div className="frontpage">
+      <h1>Welkom bij POST IT.</h1>
 
-        {/* Desktop 16:9 */}
-        <img
-          src={desktopImage}
-          alt=""
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-        />
-      </picture>
+      <p>
+        POST IT is een dagelijkse post die meebeweegt met wat er vandaag speelt.
+        Niet om iets van u te vragen, maar om iets zichtbaar te maken.
+      </p>
+
+      <p>
+        <strong>POST IT heeft altijd een post voor u.</strong><br />
+        De vorm kan verschillen, maar er is altijd iets dat vandaag past.
+      </p>
+
+      <p>POST IT kan verschillende vormen aannemen.</p>
+
+      <p>
+        Soms is het logisch en zakelijk.<br />
+        Soms persoonlijk en reflectief.<br />
+        Soms richtinggevend, zonder advies te geven.
+      </p>
+
+      <p>
+        Geen van deze vormen is beter dan de andere.
+        Ze sluiten aan op wat er vandaag nodig is.
+      </p>
+
+      <p>
+        De toon van de post wordt bepaald in de intake.
+        Wat u daar deelt, zet de toon voor de post van vandaag.
+      </p>
+
+      <p>
+        U hoeft niets te kiezen.
+        De intake helpt alleen om te begrijpen wat passend is.
+      </p>
+
+      <button onClick={onContinue}>
+        Verder
+      </button>
     </div>
   );
 }

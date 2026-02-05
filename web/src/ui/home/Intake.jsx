@@ -1,48 +1,287 @@
 import { useState } from "react";
+import AudioTranscriber from "../components/AudioTranscriber";
 
 export default function Intake({ onComplete }) {
-  const STEPS = ["CONTEXT", "TONE", "BOUNDARIES", "DONE"];
-  const [stepIndex, setStepIndex] = useState(0);
+  const [step, setStep] = useState(0);
 
-  function next() {
-    const nextIndex = stepIndex + 1;
-    if (STEPS[nextIndex] === "DONE") {
-      onComplete();
-    } else {
-      setStepIndex(nextIndex);
+  const [kladblok, setKladblok] = useState("");
+  const [doelgroep, setDoelgroep] = useState("");
+  const [intentie, setIntentie] = useState("");
+  const [context, setContext] = useState("");
+  const [platformen, setPlatformen] = useState([]);
+
+  const [error, setError] = useState("");
+
+  const MIN_WORDS = 20;
+  const MAX_WORDS = 220;
+
+  function wordCount(text) {
+    return text.trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  const wc = wordCount(kladblok);
+  const isTooLong = wc > MAX_WORDS;
+
+  function togglePlatform(p) {
+    setPlatformen((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+    );
+  }
+
+  function validateStep(nextStep) {
+    setError("");
+
+    if (step === 0) {
+      if (wc < MIN_WORDS) {
+        setError(`Schrijf minimaal ${MIN_WORDS} woorden.`);
+        return;
+      }
+      if (wc > MAX_WORDS) {
+        setError("Deze tekst is te lang voor één post.");
+        return;
+      }
     }
+
+    if (step === 1 && !doelgroep) {
+      setError("Kies een doelgroep.");
+      return;
+    }
+
+    if (step === 2 && !intentie) {
+      setError("Kies één intentie.");
+      return;
+    }
+
+    if (step === 3 && !context) {
+      setError("Kies een context.");
+      return;
+    }
+
+    if (step === 4 && platformen.length === 0) {
+      setError("Kies minimaal één platform.");
+      return;
+    }
+
+    setStep(nextStep);
+  }
+
+  function Button({ active, children, onClick }) {
+    return (
+      <button
+        onClick={onClick}
+        style={{
+          padding: "10px 14px",
+          borderRadius: 6,
+          border: "1px solid #ccc",
+          background: active ? "#111" : "#f2f2f2",
+          color: active ? "#fff" : "#000",
+          cursor: "pointer",
+        }}
+      >
+        {children}
+      </button>
+    );
+  }
+
+  function Nav({ onBack, onNext, nextLabel = "Verder" }) {
+    return (
+      <div style={{ display: "flex", gap: 16, marginTop: 32 }}>
+        {onBack && <button onClick={onBack}>Terug</button>}
+        {onNext && <button onClick={onNext}>{nextLabel}</button>}
+      </div>
+    );
+  }
+
+  function ConfirmBox({ label }) {
+    return (
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid #ddd",
+          padding: 12,
+          borderRadius: 6,
+          marginTop: 16,
+        }}
+      >
+        <strong>Gekozen:</strong>
+        <div style={{ marginTop: 4 }}>{label || "—"}</div>
+      </div>
+    );
   }
 
   return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        backgroundColor: "#F6F3EE",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 420,
-          backgroundColor: "#fff",
-          padding: 32,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-        }}
-      >
-        {STEPS[stepIndex] === "CONTEXT" && <p>Vertel iets over je situatie.</p>}
-        {STEPS[stepIndex] === "TONE" && <p>Welke toon past bij jou?</p>}
-        {STEPS[stepIndex] === "BOUNDARIES" && (
-          <p>Zijn er dingen die we moeten vermijden?</p>
+    <div style={styles.wrapper}>
+      <div style={styles.card}>
+        {error && (
+          <p style={{ color: "#8a6d3b", marginBottom: 16 }}>{error}</p>
         )}
 
-        <button onClick={next}>
-          {STEPS[stepIndex] === "BOUNDARIES" ? "Afronden" : "Verder"}
-        </button>
+        {/* STAP 0 — KLADBLOK */}
+        {step === 0 && (
+          <>
+            <h2>Uw gedachten</h2>
+            <p>Zeg of schrijf wat u wilt posten.</p>
+
+            <textarea
+              value={kladblok}
+              onChange={(e) => setKladblok(e.target.value)}
+              rows={6}
+              placeholder="Wat speelt er vandaag?"
+              style={{
+                ...styles.textarea,
+                borderColor: isTooLong ? "#d6b36a" : "#ccc",
+              }}
+            />
+
+            <AudioTranscriber
+              onResult={(text) =>
+                setKladblok((prev) => (prev ? prev + " " + text : text))
+              }
+            />
+
+            <Nav onNext={() => validateStep(1)} />
+          </>
+        )}
+
+        {/* STAP 1 — DOELGROEP */}
+        {step === 1 && (
+          <>
+            <h2>Voor wie is deze post?</h2>
+            <div style={styles.choices}>
+              {["Klanten", "Volgers", "Collega’s", "Brede doelgroep"].map((o) => (
+                <Button
+                  key={o}
+                  active={doelgroep === o}
+                  onClick={() => setDoelgroep(o)}
+                >
+                  {o}
+                </Button>
+              ))}
+            </div>
+            <ConfirmBox label={doelgroep} />
+            <Nav onBack={() => setStep(0)} onNext={() => validateStep(2)} />
+          </>
+        )}
+
+        {/* STAP 2 — INTENTIE */}
+        {step === 2 && (
+          <>
+            <h2>Wat wilt u met deze post?</h2>
+            <div style={styles.choices}>
+              {["Informeren", "Delen", "Positioneren", "Aankondigen"].map((o) => (
+                <Button
+                  key={o}
+                  active={intentie === o}
+                  onClick={() => setIntentie(o)}
+                >
+                  {o}
+                </Button>
+              ))}
+            </div>
+            <ConfirmBox label={intentie} />
+            <Nav onBack={() => setStep(1)} onNext={() => validateStep(3)} />
+          </>
+        )}
+
+        {/* STAP 3 — CONTEXT */}
+        {step === 3 && (
+          <>
+            <h2>Wat speelt er nu?</h2>
+            <div style={styles.choices}>
+              {[
+                "Actualiteit",
+                "Persoonlijk moment",
+                "Reactie op iets",
+                "Geen specifieke aanleiding",
+              ].map((o) => (
+                <Button
+                  key={o}
+                  active={context === o}
+                  onClick={() => setContext(o)}
+                >
+                  {o}
+                </Button>
+              ))}
+            </div>
+            <ConfirmBox label={context} />
+            <Nav onBack={() => setStep(2)} onNext={() => validateStep(4)} />
+          </>
+        )}
+
+        {/* STAP 4 — PLATFORMEN */}
+        {step === 4 && (
+          <>
+            <h2>Waar plaatst u deze post?</h2>
+            <div style={styles.choices}>
+              {["Instagram", "LinkedIn", "Facebook", "X", "TikTok"].map((p) => (
+                <Button
+                  key={p}
+                  active={platformen.includes(p)}
+                  onClick={() => togglePlatform(p)}
+                >
+                  {p}
+                </Button>
+              ))}
+            </div>
+            <ConfirmBox label={platformen.join(", ")} />
+            <Nav onBack={() => setStep(3)} onNext={() => validateStep(5)} />
+          </>
+        )}
+
+        {/* STAP 5 — BEVESTIGEN */}
+        {step === 5 && (
+          <>
+            <h2>Bevestigen</h2>
+            <ConfirmBox label={kladblok} />
+            <ConfirmBox label={doelgroep} />
+            <ConfirmBox label={intentie} />
+            <ConfirmBox label={context} />
+            <ConfirmBox label={platformen.join(", ")} />
+
+            <Nav
+              onBack={() => setStep(4)}
+              onNext={() =>
+                onComplete({
+                  kladblok,
+                  doelgroep,
+                  intentie,
+                  context,
+                  platformen,
+                })
+              }
+              nextLabel="Bevestigen"
+            />
+          </>
+        )}
       </div>
     </div>
   );
 }
+
+const styles = {
+  wrapper: {
+    minHeight: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  card: {
+    width: 620,
+    padding: 32,
+    background: "#f6f3ee",
+    borderRadius: 12,
+  },
+  textarea: {
+    width: "100%",
+    padding: 12,
+    borderRadius: 6,
+    border: "1px solid #ccc",
+    fontFamily: "inherit",
+  },
+  choices: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 16,
+  },
+};
