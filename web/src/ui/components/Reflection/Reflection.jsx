@@ -15,7 +15,7 @@ import {
 const FRAME_DURATION = 320;
 const MIN_STEPS = 7;
 const FADE_IN_DURATION = 1200;
-const FADE_OUT_DURATION = 1800;
+const FADE_OUT_DURATION = 1500;
 const LOGO_DELAY = FRAME_DURATION * 2;
 
 export default function Reflection({ onFadeOutStart, onDone }) {
@@ -73,11 +73,10 @@ export default function Reflection({ onFadeOutStart, onDone }) {
         inset: 0,
         zIndex: 9999,
         pointerEvents: "none",
-        backgroundColor: "black",
+        backgroundColor: fadingOut ? "rgba(255,255,255,0)" : "rgba(255,255,255,0.98)",
         opacity: visible ? (fadingOut ? 0 : 1) : 0,
-        transition: `opacity ${
-          fadingOut ? FADE_OUT_DURATION : FADE_IN_DURATION
-        }ms cubic-bezier(0.4, 0.0, 0.2, 1)`,
+        transition: `opacity ${fadingOut ? FADE_OUT_DURATION : FADE_IN_DURATION}ms cubic-bezier(0.7, 0.2, 0.2, 1)`,
+        boxShadow: "0 0 80px 0 rgba(0,0,0,0.12)",
       }}
     >
       {/* Frames */}
@@ -89,6 +88,8 @@ export default function Reflection({ onFadeOutStart, onDone }) {
           height: "100%",
           objectFit: "cover",
           objectPosition: "50% 0%",
+          filter: "blur(0.5px) brightness(1.04)",
+          transition: "filter 600ms cubic-bezier(0.7,0.2,0.2,1)",
         }}
       />
 
@@ -102,7 +103,8 @@ export default function Reflection({ onFadeOutStart, onDone }) {
           top: "38%",
           width: "420px",
           opacity: logoVisible ? 1 : 0,
-          transition: `opacity ${FADE_IN_DURATION}ms ease`,
+          transition: `opacity ${FADE_IN_DURATION}ms cubic-bezier(0.7,0.2,0.2,1)`,
+          filter: logoVisible ? "drop-shadow(0 2px 16px rgba(0,0,0,0.10))" : "none",
         }}
       />
     </div>

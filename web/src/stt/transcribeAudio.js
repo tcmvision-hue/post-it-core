@@ -1,6 +1,16 @@
 export async function transcribeAudio(audioBlob) {
-  // STUB – wordt later gekoppeld aan echte STT
-  console.log("STT ontvangen:", audioBlob);
-
-  return ""; // altijd veilige string
+  // Stuurt audioBlob direct naar backend voor transcriptie
+  try {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'audio.webm');
+    const response = await fetch('/api/transcribe', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) return "";
+    const data = await response.json();
+    return typeof data.text === "string" ? data.text : "";
+  } catch {
+    return "";
+  }
 }

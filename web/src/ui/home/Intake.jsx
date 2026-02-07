@@ -1,10 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { checkKladblok } from "../../ai/checkKladblok";
+// import { checkKladblok } from "../ai/checkKladblok";
 import AudioTranscriber from "../components/AudioTranscriber";
 
 export default function Intake({ onComplete }) {
   const [step, setStep] = useState(0);
 
   const [kladblok, setKladblok] = useState("");
+  const [kladblokOk, setKladblokOk] = useState(true);
+  const [kladblokCheckLoading, setKladblokCheckLoading] = useState(false);
+  const [invalidAttempts, setInvalidAttempts] = useState(0);
+  const [resetNotice, setResetNotice] = useState("");
+  const resetTimeout = useRef(null);
   const [doelgroep, setDoelgroep] = useState("");
   const [intentie, setIntentie] = useState("");
   const [context, setContext] = useState("");
@@ -22,18 +29,77 @@ export default function Intake({ onComplete }) {
   const wc = wordCount(kladblok);
   const isTooLong = wc > MAX_WORDS;
 
+  useEffect(() => {
+    if (!kladblok.trim()) {
+      setKladblokOk(true);
+      return;
+    }
+    setKladblokCheckLoading(true);
+    checkKladblok(kladblok).then((result) => {
+      setKladblokOk(result.ok);
+      setKladblokCheckLoading(false);
+      if (result.ok) {
+        setInvalidAttempts(0);
+      }
+    });
+    // eslint-disable-next-line
+  }, [kladblok]);
+
   function togglePlatform(p) {
     setPlatformen((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
   }
 
+  function getInvalidInputMessage(attempt) {
+    if (attempt <= 1) {
+      // Poging 1 & 2 — zacht, uitnodigend
+      return [
+        "Dit voelt nog wat leeg. Neem gerust even de tijd om te beschrijven wat er vandaag speelt.",
+        "Je kunt hier iets toevoegen over wat voor jou belangrijk is vandaag."
+      ][attempt];
+    }
+    if (attempt === 2) {
+      // Poging 3 — directer
+      return "Om een goede post te maken, is wat meer context nodig.";
+    }
+    if (attempt === 3) {
+      // Poging 4 — licht sarcastisch
+      return "Ik kan veel, maar gedachten lezen hoort daar nog niet bij.";
+    }
+    if (attempt === 4) {
+      // Poging 5 — laatste waarschuwing
+      return "Zonder context kan ik geen post maken.";
+    }
+    return "";
+  }
+
+  function resetIntake() {
+    setKladblok("");
+    setDoelgroep("");
+    setIntentie("");
+    setContext("");
+    setPlatformen([]);
+    setInvalidAttempts(0);
+    setResetNotice("We beginnen opnieuw.");
+    resetTimeout.current = setTimeout(() => setResetNotice(""), 2000);
+    setStep(0);
+  }
+
   function validateStep(nextStep) {
     setError("");
 
     if (step === 0) {
-      if (wc < MIN_WORDS) {
-        setError(`Schrijf minimaal ${MIN_WORDS} woorden.`);
+      if (wc < MIN_WORDS || !kladblokOk) {
+        if (invalidAttempts < 4) {
+          setInvalidAttempts((prev) => prev + 1);
+          setError(getInvalidInputMessage(invalidAttempts));
+        } else {
+          setError(getInvalidInputMessage(4));
+          setTimeout(() => {
+            resetIntake();
+          }, 1500);
+        }
         return;
       }
       if (wc > MAX_WORDS) {
@@ -112,7 +178,10 @@ export default function Intake({ onComplete }) {
   return (
     <div style={styles.wrapper}>
       <div style={styles.card}>
-        {error && (
+        {resetNotice && (
+          <p style={{ color: "#8a6d3b", marginBottom: 16 }}>{resetNotice}</p>
+        )}
+        {!resetNotice && error && (
           <p style={{ color: "#8a6d3b", marginBottom: 16 }}>{error}</p>
         )}
 
@@ -129,9 +198,19 @@ export default function Intake({ onComplete }) {
               placeholder="Wat speelt er vandaag?"
               style={{
                 ...styles.textarea,
-                borderColor: isTooLong ? "#d6b36a" : "#ccc",
+                borderColor: isTooLong ? "#d6b36a" : kladblokOk ? "#ccc" : "#d66a6a",
               }}
             />
+            {!kladblokOk && (
+              <p style={{ color: "#d66a6a", marginTop: 8 }}>
+                Let op: deze tekst is niet geschikt voor Post This.
+              </p>
+            )}
+            {kladblokCheckLoading && (
+              <p style={{ color: "#888", marginTop: 8 }}>
+                AI check bezig…
+              </p>
+            )}
 
             <AudioTranscriber
               onResult={(text) =>

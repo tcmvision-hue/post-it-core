@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from "react";
+import { transcribeAudio } from "../../stt/transcribeAudio";
 
 export default function AudioTranscriber({ onResult }) {
   const mediaRecorderRef = useRef(null);
@@ -6,6 +7,10 @@ export default function AudioTranscriber({ onResult }) {
 
   const [recording, setRecording] = useState(false);
   const [status, setStatus] = useState("");
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [showWave, setShowWave] = useState(false);
+  const analyserRef = useRef(null);
+  const animationRef = useRef(null);
 
   async function start() {
     setStatus("");
@@ -13,7 +18,27 @@ export default function AudioTranscriber({ onResult }) {
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    const mediaRecorder = new MediaRecorder(stream);
+    // Audio analyser setup
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    analyserRef.current = analyser;
+    setShowWave(true);
+
+    function animateWave() {
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteTimeDomainData(dataArray);
+      // Bereken gemiddelde amplitude
+      const avg = dataArray.reduce((a, b) => a + Math.abs(b - 128), 0) / dataArray.length;
+      setAudioLevel(avg);
+      animationRef.current = requestAnimationFrame(animateWave);
+    }
+    animateWave();
+
+    const options = { mimeType: "audio/webm;codecs=opus" };
+    const mediaRecorder = new MediaRecorder(stream, options);
     mediaRecorderRef.current = mediaRecorder;
 
     mediaRecorder.ondataavailable = (e) => {
@@ -26,16 +51,27 @@ export default function AudioTranscriber({ onResult }) {
     setRecording(true);
   }
 
-  function stop() {
+  async function stop() {
     setRecording(false);
+    setShowWave(false);
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (analyserRef.current && analyserRef.current.context) analyserRef.current.context.close();
     mediaRecorderRef.current.stop();
 
-    mediaRecorderRef.current.onstop = () => {
+    mediaRecorderRef.current.onstop = async () => {
       const audioBlob = new Blob(audioChunksRef.current, {
         type: "audio/webm",
       });
-      console.log("Audio blob:", audioBlob);
       setStatus("Spraak ontvangen. Audio is vastgelegd.");
+      try {
+        const text = await transcribeAudio(audioBlob);
+        if (typeof text === "string" && text.trim()) {
+          onResult(text);
+        }
+        // Bij falen of lege string: niets toevoegen, geen foutmelding
+      } catch {
+        // Stilte bij falen
+      }
     };
   }
 
@@ -43,6 +79,25 @@ export default function AudioTranscriber({ onResult }) {
     <div>
       {status && <p>{status}</p>}
       <button onClick={recording ? stop : start}>🎤</button>
+      {showWave && (
+        <div style={{ margin: "16px 0", height: 32, width: 220, background: "#f6f3ee", borderRadius: 8, overflow: "hidden", display: "flex", alignItems: "center" }}>
+          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center" }}>
+            {[...Array(32)].map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 6,
+                  height: Math.max(8, audioLevel + Math.sin(i + Date.now() / 200) * 8),
+                  background: "#d66a6a",
+                  marginRight: 2,
+                  borderRadius: 4,
+                  transition: "height 0.1s",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
