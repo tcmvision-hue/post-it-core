@@ -15,6 +15,7 @@ import Reflection from "./ui/components/Reflection/Reflection";
 import Generation from "./ui/home/Generation";
 import SelectPost from "./ui/home/SelectPost";
 import Output from "./ui/home/Output";
+import { getDaypartKey } from "./utils/date";
 
 const PHASES = {
   WELCOME: "WELCOME",
@@ -26,7 +27,10 @@ const PHASES = {
   FINAL: "FINAL",
   PACKAGES: "PACKAGES",
   FINISHED: "FINISHED",
+  LOCKED: "LOCKED",
 };
+
+const DAYPART_LOCK_KEY = "post-this:last-daypart-key";
 
 export default function App() {
   const [phase, setPhase] = useState(PHASES.WELCOME);
@@ -34,6 +38,19 @@ export default function App() {
   const [intake, setIntake] = useState(null);
   const [generations, setGenerations] = useState([]);
   const [selectedPost, setSelectedPost] = useState("");
+
+  function isDaypartLocked() {
+    if (typeof window === "undefined") return false;
+    const currentKey = getDaypartKey();
+    const storedKey = localStorage.getItem(DAYPART_LOCK_KEY);
+    return storedKey === currentKey;
+  }
+
+  function lockCurrentDaypart() {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(DAYPART_LOCK_KEY, getDaypartKey());
+  }
+
 
   // ⬇️ Alleen visuele timing
   const [showGeneration, setShowGeneration] = useState(false);
@@ -48,13 +65,23 @@ export default function App() {
   }
 
   if (phase === PHASES.TODAY) {
-    return <Today onContinue={() => setPhase(PHASES.INTAKE)} />;
+    return (
+      <Today
+        onContinue={() =>
+          setPhase(isDaypartLocked() ? PHASES.LOCKED : PHASES.INTAKE)
+        }
+      />
+    );
   }
 
   if (phase === PHASES.INTAKE) {
     return (
       <Intake
         onComplete={(data) => {
+          if (isDaypartLocked()) {
+            setPhase(PHASES.LOCKED);
+            return;
+          }
           setIntake(data);
           setGenerations([]);
           setShowGeneration(false);
@@ -88,6 +115,7 @@ export default function App() {
               const finalPost =
                 generations[generations.length - 1] || "";
               setSelectedPost(finalPost);
+              lockCurrentDaypart();
               setPhase(PHASES.FINAL);
             }}
           />
@@ -111,9 +139,42 @@ export default function App() {
         posts={generations}
         onSelect={(post) => {
           setSelectedPost(post || "");
+          lockCurrentDaypart();
           setPhase(PHASES.FINAL);
         }}
       />
+    );
+  }
+
+  if (phase === PHASES.LOCKED) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#F6F3EE",
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 520,
+            padding: 32,
+            backgroundColor: "#FFFFFF",
+            borderRadius: 12,
+            textAlign: "center",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>U heeft al een post voor dit dagdeel</h2>
+          <p>Kom terug in het volgende dagdeel om opnieuw te genereren.</p>
+          <button onClick={() => setPhase(PHASES.FINISHED)}>
+            Afsluiten
+          </button>
+        </div>
+      </div>
     );
   }
 

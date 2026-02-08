@@ -18,7 +18,7 @@ export async function generatePost({
       {
         role: "system",
         content:
-          "Je genereert exact één social media post. Geen uitleg. Geen vragen.",
+          "Je genereert exact één social media post. De post is tijdloos en verwijst niet naar tijd, dagdelen of actualiteit. Geen uitleg. Geen vragen.",
       },
       {
         role: "user",

@@ -6,6 +6,7 @@ export default function AudioTranscriber({ onResult }) {
   const audioChunksRef = useRef([]);
 
   const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [status, setStatus] = useState("");
   const [audioLevel, setAudioLevel] = useState(0);
   const [showWave, setShowWave] = useState(false);
@@ -63,6 +64,7 @@ export default function AudioTranscriber({ onResult }) {
         type: "audio/webm",
       });
       setStatus("Spraak ontvangen. Audio is vastgelegd.");
+      setTranscribing(true);
       try {
         const text = await transcribeAudio(audioBlob);
         if (typeof text === "string" && text.trim()) {
@@ -71,6 +73,8 @@ export default function AudioTranscriber({ onResult }) {
         // Bij falen of lege string: niets toevoegen, geen foutmelding
       } catch {
         // Stilte bij falen
+      } finally {
+        setTranscribing(false);
       }
     };
   }
@@ -78,6 +82,25 @@ export default function AudioTranscriber({ onResult }) {
   return (
     <div>
       {status && <p>{status}</p>}
+      {transcribing && (
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "6px 10px",
+            borderRadius: 20,
+            background: "#f6f3ee",
+            border: "1px solid #e2ddd4",
+            marginBottom: 12,
+          }}
+        >
+          <span style={{ fontSize: 16 }}>⏳</span>
+          <span style={{ fontSize: 13, color: "#6b5f4c" }}>
+            Spraak wordt verwerkt…
+          </span>
+        </div>
+      )}
       <button onClick={recording ? stop : start}>🎤</button>
       {showWave && (
         <div style={{ margin: "16px 0", height: 32, width: 220, background: "#f6f3ee", borderRadius: 8, overflow: "hidden", display: "flex", alignItems: "center" }}>
