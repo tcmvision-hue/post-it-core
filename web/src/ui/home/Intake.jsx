@@ -42,7 +42,6 @@ export default function Intake({ onComplete }) {
         setInvalidAttempts(0);
       }
     });
-    // eslint-disable-next-line
   }, [kladblok]);
 
   function togglePlatform(p) {

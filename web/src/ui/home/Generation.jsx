@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 
-const MAX_GENERATIONS = 3;
-
 export default function Generation({
   kladblok,
   doelgroep,
@@ -9,16 +7,16 @@ export default function Generation({
   waaromNu,
   generations,
   onGenerate,
-  onStop,
+  onConfirm,
+  onReview,
 }) {
+  const MAX_GENERATIONS = 3;
   const [loading, setLoading] = useState(false);
   const [keywords, setKeywords] = useState("");
-  const [view, setView] = useState("generation");
-  const [selectedPost, setSelectedPost] = useState(null);
 
   const generationCount = generations.length;
   const currentPost = generations[generationCount - 1] ?? null;
-  const isLast = generationCount === MAX_GENERATIONS;
+  const isLast = generationCount >= MAX_GENERATIONS;
 
   // Auto-start eerste generatie
   useEffect(() => {
@@ -27,7 +25,7 @@ export default function Generation({
   }, []);
 
   async function runGeneration() {
-    if (loading || generationCount >= MAX_GENERATIONS) return;
+    if (loading || isLast) return;
     setLoading(true);
 
     try {
@@ -51,38 +49,12 @@ export default function Generation({
   }
 
   // =======================
-  // SELECTIE
-  // =======================
-  if (view === "selection") {
-    return (
-      <div style={{ padding: 40, maxWidth: 800, margin: "0 auto" }}>
-        <h2 style={{ marginBottom: 24 }}>Kies uw post</h2>
-
-        {generations.map((post, i) => (
-          <div
-            key={i}
-            onClick={() => {
-              setSelectedPost(post);   // andere verdwijnen
-              onStop(post);            // door naar Output
-            }}
-            style={{
-              padding: 24,
-              marginBottom: 16,
-              cursor: "pointer",
-              border: "1px solid #ddd",
-              backgroundColor: "#fff",
-            }}
-          >
-            <p style={{ whiteSpace: "pre-wrap" }}>{post}</p>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  // =======================
   // GENERATION
   // =======================
+  function preventCopy(event) {
+    event.preventDefault();
+  }
+
   return (
     <div style={{ padding: 40, maxWidth: 620, margin: "0 auto" }}>
       <h2>
@@ -96,7 +68,14 @@ export default function Generation({
         style={{ width: "100%", marginBottom: 16 }}
       />
 
-      <p style={{ whiteSpace: "pre-wrap", opacity: loading ? 0.4 : 1 }}>
+      <p
+        style={{
+          whiteSpace: "pre-wrap",
+          opacity: loading ? 0.4 : 1,
+          userSelect: "none",
+        }}
+        onCopy={preventCopy}
+      >
         {currentPost ||
           "Er wordt een generatie voor je gegenereerd. Even geduld…"}
       </p>
@@ -110,24 +89,18 @@ export default function Generation({
           </button>
         )}
 
-        {currentPost && (
+        {currentPost && generationCount > 0 && (
           <button
-            onClick={() => {
-              if (isLast) onStop(currentPost);
-              else onStop(currentPost);
-            }}
+            onClick={() => onConfirm(currentPost)}
             disabled={loading}
           >
             Bevestigen
           </button>
         )}
 
-        {isLast && (
-          <button
-            onClick={() => setView("selection")}
-            disabled={loading}
-          >
-            Ga naar selectie
+        {currentPost && isLast && (
+          <button onClick={onReview} disabled={loading}>
+            Selecteer je post
           </button>
         )}
       </div>

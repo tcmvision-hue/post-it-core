@@ -35,8 +35,8 @@ export default function Explanation({ onContinue }) {
         </h2>
 
         <p style={{ color: "#1A1A1A", lineHeight: 1.6 }}>
-          POST IT helpt je om op vaste momenten een post te maken
-          die past bij wat er vandaag speelt.
+          POST IT helpt je om een post te maken
+          die past bij wat er nu speelt.
         </p>
 
         <p style={{ color: "#5A5A5A", lineHeight: 1.6 }}>
@@ -45,8 +45,8 @@ export default function Explanation({ onContinue }) {
         </p>
 
         <p style={{ color: "#5A5A5A", lineHeight: 1.6 }}>
-          Op basis daarvan genereert POST IT maximaal drie voorstellen.
-          Jij kiest één post als jouw post van dit moment.
+          Op basis daarvan genereert POST IT meerdere voorstellen.
+          Jij kiest één post als jouw post.
         </p>
 
         <p style={{ color: "#5A5A5A", lineHeight: 1.6 }}>

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
@@ -15,6 +16,9 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
+    "eslint": "^9.19.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.12",
     "vite": "^5.0.0"
   }
 }

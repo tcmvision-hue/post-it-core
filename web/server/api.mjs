@@ -35,7 +35,7 @@ app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
           fs.writeFileSync(tempPath, req.file.buffer);
           writeSuccess = true;
           break;
-        } catch (err) {
+        } catch {
           // Probeer volgende dir
         }
       }
@@ -80,7 +80,7 @@ app.post("/api/check-kladblok", async (req, res) => {
     });
     const output = completion.choices[0]?.message?.content?.toLowerCase() || "ok";
     res.json({ ok: output.includes("ok") });
-  } catch (err) {
+  } catch {
     res.json({ ok: true });
   }
 });

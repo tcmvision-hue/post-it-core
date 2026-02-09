@@ -3,6 +3,10 @@ export default function SelectPost({ posts, onSelect }) {
     return null;
   }
 
+  function preventCopy(event) {
+    event.preventDefault();
+  }
+
   return (
     <div
       style={{
@@ -24,10 +28,10 @@ export default function SelectPost({ posts, onSelect }) {
           boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
         }}
       >
-        <h2 style={{ marginTop: 0 }}>Kies jouw post</h2>
+        <h2 style={{ marginTop: 0 }}>Selecteer je post</h2>
 
         <p style={{ color: "#555", marginBottom: 24 }}>
-          Je ziet hieronder maximaal drie voorstellen.  
+          Je ziet hieronder maximaal drie versies.
           Kies er één. De andere verdwijnen.
         </p>
 
@@ -48,7 +52,9 @@ export default function SelectPost({ posts, onSelect }) {
                   marginTop: 0,
                   marginBottom: 16,
                   lineHeight: 1.5,
+                  userSelect: "none",
                 }}
+                onCopy={preventCopy}
               >
                 {post}
               </p>
