@@ -18,6 +18,7 @@ import Generation from "./ui/home/Generation";
 import SelectPost from "./ui/home/SelectPost";
 import Output from "./ui/home/Output";
 import Phase4Options from "./ui/home/Phase4Options";
+import Download from "./ui/download/Download";
 
 const PHASES = {
   WELCOME: "WELCOME",
@@ -32,11 +33,21 @@ const PHASES = {
   FINISHED: "FINISHED",
 };
 
+const INTAKE_KEY = "post_it_intake";
+const INTAKE_PERSIST_KEY = "post_it_intake_persist";
+
 function loadStoredIntake() {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem("post_it_intake");
-    return raw ? JSON.parse(raw) : null;
+    const sessionRaw = window.sessionStorage.getItem(INTAKE_KEY);
+    if (sessionRaw) return JSON.parse(sessionRaw);
+
+    const localRaw = window.localStorage.getItem(INTAKE_PERSIST_KEY);
+    if (!localRaw) return null;
+
+    const parsed = JSON.parse(localRaw);
+    window.sessionStorage.setItem(INTAKE_KEY, localRaw);
+    return parsed;
   } catch {
     return null;
   }
@@ -45,7 +56,9 @@ function loadStoredIntake() {
 function storeIntake(data) {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem("post_it_intake", JSON.stringify(data));
+    const payload = JSON.stringify(data);
+    window.sessionStorage.setItem(INTAKE_KEY, payload);
+    window.localStorage.setItem(INTAKE_PERSIST_KEY, payload);
   } catch {
     // Ignore storage errors (private mode or quota)
   }
@@ -54,7 +67,8 @@ function storeIntake(data) {
 function clearStoredIntake() {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.removeItem("post_it_intake");
+    window.sessionStorage.removeItem(INTAKE_KEY);
+    window.localStorage.removeItem(INTAKE_PERSIST_KEY);
   } catch {
     // Ignore storage errors
   }
@@ -70,6 +84,8 @@ function getReturnPhase() {
 }
 
 export default function App() {
+  const isDownloadRoute =
+    typeof window !== "undefined" && window.location.pathname === "/download";
   const [phase, setPhase] = useState(getReturnPhase);
 
   const [intake, setIntake] = useState(() => loadStoredIntake());
@@ -86,6 +102,10 @@ export default function App() {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
+
+  if (isDownloadRoute) {
+    return <Download />;
+  }
 
   // ⬇️ Alleen visuele timing
   const [showGeneration, setShowGeneration] = useState(false);

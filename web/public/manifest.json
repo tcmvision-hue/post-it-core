@@ -1,0 +1,20 @@
+{
+  "name": "POST THIS",
+  "short_name": "POST THIS",
+  "display": "standalone",
+  "start_url": "/",
+  "background_color": "#F6F3EE",
+  "theme_color": "#F6F3EE",
+  "icons": [
+    {
+      "src": "/icons/post-this-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/post-this-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

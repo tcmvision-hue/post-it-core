@@ -23,11 +23,21 @@ export default function Reflection({ onFadeOutStart, onDone }) {
   const [visible, setVisible] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
   const [logoVisible, setLogoVisible] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const frameCount = REFLECTION_FRAMES.length;
   const playDuration = MIN_STEPS * FRAME_DURATION;
 
   useEffect(() => {
+    const media = window.matchMedia("(max-width: 768px)");
+    const updateIsMobile = () => setIsMobile(media.matches);
+    updateIsMobile();
+    if (media.addEventListener) {
+      media.addEventListener("change", updateIsMobile);
+    } else {
+      media.addListener(updateIsMobile);
+    }
+
     // Fade-in
     const fadeInTimer = setTimeout(() => {
       setVisible(true);
@@ -58,6 +68,11 @@ export default function Reflection({ onFadeOutStart, onDone }) {
     }, playDuration + FADE_OUT_DURATION);
 
     return () => {
+      if (media.removeEventListener) {
+        media.removeEventListener("change", updateIsMobile);
+      } else {
+        media.removeListener(updateIsMobile);
+      }
       clearTimeout(fadeInTimer);
       clearTimeout(logoTimer);
       clearTimeout(fadeOutTimer);
@@ -87,7 +102,7 @@ export default function Reflection({ onFadeOutStart, onDone }) {
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          objectPosition: "50% 0%",
+          objectPosition: isMobile ? "50% 12%" : "50% 0%",
           filter: "blur(0.5px) brightness(1.04)",
           transition: "filter 600ms cubic-bezier(0.7,0.2,0.2,1)",
         }}
@@ -99,9 +114,10 @@ export default function Reflection({ onFadeOutStart, onDone }) {
         alt="Logo"
         style={{
           position: "absolute",
-          left: "6%",
-          top: "38%",
-          width: "420px",
+          left: isMobile ? "-3%" : "6%",
+          top: isMobile ? "49%" : "38%",
+          width: isMobile ? "min(240px, 60vw)" : "min(420px, 60vw)",
+          transform: isMobile ? "translateY(-50%)" : "none",
           opacity: logoVisible ? 1 : 0,
           transition: `opacity ${FADE_IN_DURATION}ms cubic-bezier(0.7,0.2,0.2,1)`,
           filter: logoVisible ? "drop-shadow(0 2px 16px rgba(0,0,0,0.10))" : "none",

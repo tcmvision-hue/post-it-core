@@ -30,18 +30,32 @@ export default function Intake({ onComplete }) {
   const isTooLong = wc > MAX_WORDS;
 
   useEffect(() => {
-    if (!kladblok.trim()) {
+    const trimmed = kladblok.trim();
+    if (!trimmed) {
       setKladblokOk(true);
+      setKladblokCheckLoading(false);
       return;
     }
-    setKladblokCheckLoading(true);
-    checkKladblok(kladblok).then((result) => {
-      setKladblokOk(result.ok);
+
+    const count = wordCount(trimmed);
+    if (count < MIN_WORDS) {
+      setKladblokOk(true);
       setKladblokCheckLoading(false);
-      if (result.ok) {
-        setInvalidAttempts(0);
-      }
-    });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setKladblokCheckLoading(true);
+      checkKladblok(trimmed).then((result) => {
+        setKladblokOk(result.ok);
+        setKladblokCheckLoading(false);
+        if (result.ok) {
+          setInvalidAttempts(0);
+        }
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, [kladblok]);
 
   function togglePlatform(p) {

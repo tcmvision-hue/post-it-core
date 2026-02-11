@@ -1,1 +1,4 @@
 web/server/.env
+web/.env
+web/server/coinStore.json
+.tools/
