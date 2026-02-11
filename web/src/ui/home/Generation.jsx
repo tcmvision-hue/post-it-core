@@ -6,6 +6,7 @@ export default function Generation({
   intentie,
   waaromNu,
   generations,
+  confirmError,
   onGenerate,
   onConfirm,
   onReview,
@@ -13,9 +14,12 @@ export default function Generation({
   const MAX_GENERATIONS = 3;
   const [loading, setLoading] = useState(false);
   const [keywords, setKeywords] = useState("");
+  const [error, setError] = useState("");
 
   const generationCount = generations.length;
   const currentPost = generations[generationCount - 1] ?? null;
+  const currentText = currentPost?.text || "";
+  const currentLabel = currentPost?.label || "";
   const isLast = generationCount >= MAX_GENERATIONS;
 
   // Auto-start eerste generatie
@@ -27,6 +31,7 @@ export default function Generation({
   async function runGeneration() {
     if (loading || isLast) return;
     setLoading(true);
+    setError("");
 
     try {
       const res = await fetch("/api/generate", {
@@ -42,7 +47,16 @@ export default function Generation({
       });
 
       const data = await res.json();
-      if (data?.post) onGenerate(data.post);
+      if (res.ok && data?.post) {
+        onGenerate({
+          text: data.post,
+          label: keywords.trim(),
+          accent: keywords.trim(),
+          kind: generationCount === 0 ? "official" : "generation",
+        });
+      } else {
+        setError(data?.error || "Genereren mislukt");
+      }
     } finally {
       setLoading(false);
     }
@@ -61,12 +75,23 @@ export default function Generation({
         Generatie {Math.max(1, generationCount)} van {MAX_GENERATIONS}
       </h2>
 
+      {confirmError && (
+        <p style={{ color: "#A33", marginTop: 8 }}>{confirmError}</p>
+      )}
+      {error && <p style={{ color: "#A33", marginTop: 8 }}>{error}</p>}
+
       <input
         value={keywords}
         onChange={(e) => setKeywords(e.target.value)}
         placeholder="toon / richting / accent"
         style={{ width: "100%", marginBottom: 16 }}
       />
+
+      {currentLabel && (
+        <p style={{ color: "#555", marginTop: 0 }}>
+          Label: {currentLabel}
+        </p>
+      )}
 
       <p
         style={{
@@ -76,8 +101,7 @@ export default function Generation({
         }}
         onCopy={preventCopy}
       >
-        {currentPost ||
-          "Er wordt een generatie voor je gegenereerd. Even geduld…"}
+        {currentText || "Er wordt verwerkt. Even geduld…"}
       </p>
 
       {loading && currentPost && <p>Nieuwe versie wordt gegenereerd…</p>}

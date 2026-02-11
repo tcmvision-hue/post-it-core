@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getUser } from "./utils/user";
 
 /* UI – HOME */
 import Welcome from "./ui/home/Welcome";
 import Explanation from "./ui/home/Explanation";
 import Today from "./ui/home/Today";
+import CoinsGate from "./ui/home/CoinsGate";
 
 /* INTAKE */
 import Intake from "./ui/home/Intake";
@@ -15,12 +17,14 @@ import Reflection from "./ui/components/Reflection/Reflection";
 import Generation from "./ui/home/Generation";
 import SelectPost from "./ui/home/SelectPost";
 import Output from "./ui/home/Output";
+import Phase4Options from "./ui/home/Phase4Options";
 
 const PHASES = {
   WELCOME: "WELCOME",
   EXPLANATION: "EXPLANATION",
   TODAY: "TODAY",
   INTAKE: "INTAKE",
+  COINS: "COINS",
   GENERATION: "GENERATION",
   SELECT: "SELECT",
   FINAL: "FINAL",
@@ -28,16 +32,163 @@ const PHASES = {
   FINISHED: "FINISHED",
 };
 
+function loadStoredIntake() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem("post_it_intake");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeIntake(data) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem("post_it_intake", JSON.stringify(data));
+  } catch {
+    // Ignore storage errors (private mode or quota)
+  }
+}
+
+function clearStoredIntake() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem("post_it_intake");
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function getReturnPhase() {
+  if (typeof window === "undefined") return PHASES.WELCOME;
+  const params = new URLSearchParams(window.location.search);
+  const returnTo = params.get("return");
+  if (returnTo === "coins") return PHASES.COINS;
+  if (returnTo === "packages") return PHASES.PACKAGES;
+  return PHASES.WELCOME;
+}
+
 export default function App() {
-  const [phase, setPhase] = useState(PHASES.WELCOME);
+  const [phase, setPhase] = useState(getReturnPhase);
 
-  const [intake, setIntake] = useState(null);
+  const [intake, setIntake] = useState(() => loadStoredIntake());
   const [generations, setGenerations] = useState([]);
-  const [selectedPost, setSelectedPost] = useState("");
+  const [variants, setVariants] = useState([]);
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [hashtags, setHashtags] = useState([]);
+  const [cycleMeta, setCycleMeta] = useState(null);
+  const [confirmError, setConfirmError] = useState("");
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("return")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   // ⬇️ Alleen visuele timing
   const [showGeneration, setShowGeneration] = useState(false);
+
+  function ensureCycleMeta() {
+    if (cycleMeta) return cycleMeta;
+    const now = new Date();
+    const hours = now.getHours();
+    let daypart = "ochtend";
+    if (hours >= 12 && hours < 18) daypart = "middag";
+    if (hours >= 18 && hours < 23) daypart = "avond";
+    if (hours >= 23 || hours < 6) daypart = "nacht";
+
+    const meta = {
+      date: now.toISOString().split("T")[0],
+      daypart,
+    };
+    setCycleMeta(meta);
+    return meta;
+  }
+
+  function normalizePostPayload(postPayload) {
+    if (!postPayload) return { text: "", label: "", accent: "" };
+    if (typeof postPayload === "string") {
+      return { text: postPayload, label: "", accent: "" };
+    }
+    return {
+      text: postPayload.text || "",
+      label: postPayload.label || "",
+      accent: postPayload.accent || postPayload.label || "",
+    };
+  }
+
+  function createVariant(base, type) {
+    return {
+      id: `${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2)}`,
+      type,
+      kind: base.kind || type,
+      text: base.text || "",
+      label: base.label || "",
+      accent: base.accent || base.label || "",
+    };
+  }
+
+  async function confirmSelection(postPayload) {
+    setConfirmError("");
+    try {
+      const user = getUser();
+      const res = await fetch("/api/phase4/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setConfirmError(data?.error || "Bevestigen mislukt");
+        return;
+      }
+      const normalized = normalizePostPayload(postPayload);
+      const generationVariants = (generations || []).map((entry, index) => {
+        const normalizedEntry = normalizePostPayload(entry);
+        const isOfficial = entry?.kind === "official";
+        const label = normalizedEntry.label || (isOfficial
+          ? "Origineel"
+          : `Variant ${index + 1}`);
+        return createVariant(
+          {
+            ...normalizedEntry,
+            label,
+            accent: normalizedEntry.accent || label,
+            kind: entry?.kind || "generation",
+          },
+          "generation"
+        );
+      });
+
+      const chosen = generationVariants.find(
+        (variant) => variant.text === normalized.text
+      );
+      const fallback = createVariant(
+        {
+          ...normalized,
+          label: "Origineel",
+          accent: normalized.label,
+          kind: "official",
+        },
+        "original"
+      );
+      const nextVariants = generationVariants.length > 0
+        ? generationVariants
+        : [fallback];
+
+      const selectedId = chosen ? chosen.id : nextVariants[0].id;
+      setVariants(nextVariants);
+      setSelectedVariantId(selectedId);
+      setHashtags([]);
+      setPhase(PHASES.FINAL);
+    } catch {
+      setConfirmError("Bevestigen mislukt");
+    }
+  }
 
   /* HOME */
   if (phase === PHASES.WELCOME) {
@@ -58,9 +209,27 @@ export default function App() {
     return (
       <Intake
         onComplete={(data) => {
+          storeIntake(data);
           setIntake(data);
           setGenerations([]);
+          setHashtags([]);
+          setVariants([]);
+          setSelectedVariantId("");
+          setCycleMeta(null);
           setShowGeneration(false);
+          setPhase(PHASES.COINS);
+        }}
+      />
+    );
+  }
+
+  /* COINS GATE */
+  if (phase === PHASES.COINS) {
+    return (
+      <CoinsGate
+        onStart={() => {
+          ensureCycleMeta();
+          setConfirmError("");
           setPhase(PHASES.GENERATION);
         }}
       />
@@ -84,13 +253,11 @@ export default function App() {
             intentie={intake?.intentie}
             waaromNu={intake?.context}
             generations={generations}
+            confirmError={confirmError}
             onGenerate={(post) =>
               setGenerations((prev) => [...prev, post])
             }
-            onConfirm={(post) => {
-              setSelectedPost(post || "");
-              setPhase(PHASES.FINAL);
-            }}
+            onConfirm={(post) => confirmSelection(post)}
             onReview={() => setPhase(PHASES.SELECT)}
           />
         </div>
@@ -111,21 +278,42 @@ export default function App() {
     return (
       <SelectPost
         posts={generations}
-        onSelect={(post) => {
-          setSelectedPost(post || "");
-          setPhase(PHASES.FINAL);
-        }}
+        confirmError={confirmError}
+        onSelect={(post) => confirmSelection(post)}
       />
     );
   }
 
   /* FINAL */
   if (phase === PHASES.FINAL) {
+    const activeVariant = variants.find(
+      (variant) => variant.id === selectedVariantId
+    );
     return (
       <Output
-        post={selectedPost}
+        post={activeVariant?.text || ""}
+        variants={variants}
+        selectedVariantId={selectedVariantId}
+        onSelectVariant={(id) => setSelectedVariantId(id)}
+        hashtags={hashtags}
+        onToggleHashtag={(tag) =>
+          setHashtags((prev) =>
+            prev.map((entry) =>
+              entry.tag === tag
+                ? { ...entry, selected: !entry.selected }
+                : entry
+            )
+          )
+        }
+        cycleMeta={cycleMeta}
         onViewPackages={() => setPhase(PHASES.PACKAGES)}
-        onFinishSession={() => setPhase(PHASES.FINISHED)}
+        onFinishSession={() => {
+          clearStoredIntake();
+          setCycleMeta(null);
+          setVariants([]);
+          setSelectedVariantId("");
+          setPhase(PHASES.FINISHED);
+        }}
       />
     );
   }
@@ -133,18 +321,21 @@ export default function App() {
   /* PACKAGES */
   if (phase === PHASES.PACKAGES) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 32,
-          fontWeight: "bold",
+      <Phase4Options
+        post={
+          variants.find((variant) => variant.id === selectedVariantId)
+            ?.text || ""
+        }
+        variants={variants}
+        hashtags={hashtags}
+        onVariantAdd={(variant) => {
+          setVariants((prev) => [...prev, variant]);
+          setSelectedVariantId(variant.id);
+          setHashtags([]);
         }}
-      >
-        PAKKETTEN
-      </div>
+        onHashtagsUpdate={(next) => setHashtags(next || [])}
+        onBack={() => setPhase(PHASES.FINAL)}
+      />
     );
   }
 

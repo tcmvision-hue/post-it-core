@@ -207,7 +207,7 @@ export default function Intake({ onComplete }) {
             )}
             {kladblokCheckLoading && (
               <p style={{ color: "#888", marginTop: 8 }}>
-                AI check bezig…
+                Bezig met verwerken…
               </p>
             )}
 

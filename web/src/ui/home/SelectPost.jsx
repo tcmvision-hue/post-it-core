@@ -1,4 +1,4 @@
-export default function SelectPost({ posts, onSelect }) {
+export default function SelectPost({ posts, onSelect, confirmError }) {
   if (!Array.isArray(posts) || posts.length === 0) {
     return null;
   }
@@ -35,6 +35,10 @@ export default function SelectPost({ posts, onSelect }) {
           Kies er één. De andere verdwijnen.
         </p>
 
+        {confirmError && (
+          <p style={{ color: "#A33", marginBottom: 16 }}>{confirmError}</p>
+        )}
+
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {posts.map((post, index) => (
             <div
@@ -46,6 +50,11 @@ export default function SelectPost({ posts, onSelect }) {
                 background: "#FAFAFA",
               }}
             >
+              {post?.label && (
+                <p style={{ marginTop: 0, color: "#666" }}>
+                  Label: {post.label}
+                </p>
+              )}
               <p
                 style={{
                   whiteSpace: "pre-wrap",
@@ -56,7 +65,7 @@ export default function SelectPost({ posts, onSelect }) {
                 }}
                 onCopy={preventCopy}
               >
-                {post}
+                {post?.text || ""}
               </p>
 
               <button
