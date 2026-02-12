@@ -6,6 +6,7 @@ import Welcome from "./ui/home/Welcome";
 import Explanation from "./ui/home/Explanation";
 import Today from "./ui/home/Today";
 import CoinsGate from "./ui/home/CoinsGate";
+import DownloadPage from "./ui/home/Download";
 
 /* INTAKE */
 import Intake from "./ui/home/Intake";
@@ -70,6 +71,15 @@ function getReturnPhase() {
 }
 
 export default function App() {
+  const downloadPath =
+    typeof window === "undefined"
+      ? ""
+      : window.location.pathname.replace(/\/+$/, "");
+
+  if (downloadPath.toLowerCase() === "/post-this") {
+    return <DownloadPage />;
+  }
+
   const [phase, setPhase] = useState(getReturnPhase);
 
   const [intake, setIntake] = useState(() => loadStoredIntake());
