@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { transcribeAudio } from "../../stt/transcribeAudio";
+import { useI18n } from "../../i18n/I18nContext";
 
-export default function AudioTranscriber({ onResult }) {
+export default function AudioTranscriber({ onResult, onRecordingChange }) {
+  const { t, lang } = useI18n();
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -12,6 +14,12 @@ export default function AudioTranscriber({ onResult }) {
   const [showWave, setShowWave] = useState(false);
   const analyserRef = useRef(null);
   const animationRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof onRecordingChange === "function") {
+      onRecordingChange(recording);
+    }
+  }, [recording, onRecordingChange]);
 
   async function start() {
     setStatus("");
@@ -63,10 +71,10 @@ export default function AudioTranscriber({ onResult }) {
       const audioBlob = new Blob(audioChunksRef.current, {
         type: "audio/webm",
       });
-      setStatus("Spraak ontvangen. Audio is vastgelegd.");
+      setStatus(t("audio.received"));
       setTranscribing(true);
       try {
-        const text = await transcribeAudio(audioBlob);
+        const text = await transcribeAudio(audioBlob, lang);
         if (typeof text === "string" && text.trim()) {
           onResult(text);
         }
@@ -97,7 +105,7 @@ export default function AudioTranscriber({ onResult }) {
         >
           <span style={{ fontSize: 16 }}>⏳</span>
           <span style={{ fontSize: 13, color: "#6b5f4c" }}>
-            Spraak wordt verwerkt…
+            {t("intake.processing")}
           </span>
         </div>
       )}

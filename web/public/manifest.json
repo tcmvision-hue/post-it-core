@@ -3,8 +3,8 @@
   "short_name": "POST THIS",
   "display": "standalone",
   "start_url": "/",
-  "background_color": "#F6F3EE",
-  "theme_color": "#F6F3EE",
+  "background_color": "#145C63",
+  "theme_color": "#145C63",
   "icons": [
     {
       "src": "/icons/post-this-192.png",

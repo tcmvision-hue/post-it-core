@@ -5,7 +5,7 @@
 - routing
 - data-opslag
 - accounts
-- AI
+- automatische generatiebeslissingen
 - beslissingen na intake
 
 Alles hierboven is bewust uitgesloten uit Fase 1.
@@ -32,4 +32,4 @@ Elke volgende stap vereist:
 
 ---
 
-*Einde README — POST IT Fase 1*
+*Einde README — POST THIS Fase 1*

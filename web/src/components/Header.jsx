@@ -9,7 +9,7 @@ export default function Header() {
         justifyContent: 'space-between',
       }}
     >
-      <strong>POST IT</strong>
+      <strong>POST THIS</strong>
       <span style={{ fontSize: '14px', color: '#666' }}>
         core webtool
       </span>

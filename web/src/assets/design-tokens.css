@@ -1,0 +1,39 @@
+:root {
+  /* Achtergrond */
+  --color-bg-primary: #F7F7F5;
+  --color-bg-alt: #FAFAF8;
+
+  /* Tekst */
+  --color-text-primary: #1E1E1E;
+  --color-text-alt: #2A2A2A;
+  --color-text-secondary: #8A8A8A;
+
+  /* Accentkleuren (kies er één, hier blauwgrijs als default) */
+  --color-accent: #6F7D8C;
+  /* --color-accent: #7A8F7A;  // alternatief groen */
+  /* --color-accent: #B8AFA6;  // alternatief zand */
+
+  /* Inputvelden */
+  --input-border: 1px solid #E0E0DC;
+  --input-bg: #F9F9F7;
+  --input-padding: 15px;
+  --input-radius: 10px;
+
+  /* Buttons */
+  --button-radius: 10px;
+  --button-padding: 15px 28px;
+
+  /* Typografie */
+  --font-family: 'Inter', 'SF Pro', system-ui, sans-serif;
+  --font-size-title: 32px;
+  --font-size-question: 22px;
+  --font-size-body: 17px;
+  --font-size-label: 13.5px;
+  --font-weight-medium: 500;
+  --font-weight-regular: 400;
+  --line-height-body: 1.55;
+
+  /* Spacing */
+  --space-block: 28px;
+  --space-block-lg: 56px;
+}

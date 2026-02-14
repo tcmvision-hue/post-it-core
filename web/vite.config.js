@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ["zoophagous-coffered-sheryl.ngrok-free.dev"],
+    allowedHosts: true,
     proxy: {
       "/api": {
         target: "http://localhost:3001",

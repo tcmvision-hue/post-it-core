@@ -1,7 +1,9 @@
-// AI check voor kladblok: stuurt tekst naar backend voor beoordeling
+import { apiFetch } from "../utils/api";
+
+// Check voor kladblok: stuurt tekst naar backend voor beoordeling
 export async function checkKladblok(text) {
   try {
-    const response = await fetch("/api/check-kladblok", {
+    const response = await apiFetch("/api/check-kladblok", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),

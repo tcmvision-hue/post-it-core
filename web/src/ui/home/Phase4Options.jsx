@@ -1,29 +1,60 @@
 import { useEffect, useState } from "react";
 import { getUser } from "../../utils/user";
+import { apiFetch } from "../../utils/api";
+import VideoBackground from "../../components/VideoBackground";
+import { VIDEO_BG } from "./VideoBackgrounds";
+import { primaryHomeButtonStyle } from "./sharedStyles";
+import { useI18n } from "../../i18n/I18nContext";
 
 export default function Phase4Options({
   post,
-  variants,
   hashtags,
   onVariantAdd,
   onHashtagsUpdate,
+  onRegenerate,
   onBack,
 }) {
+  const { t } = useI18n();
   const [error, setError] = useState("");
   const [action, setAction] = useState("");
   const [loadingKey, setLoadingKey] = useState("");
   const [tone, setTone] = useState("");
   const [coins, setCoins] = useState(null);
+  const [outputLanguage, setOutputLanguage] = useState("en");
+  const [checkoutError, setCheckoutError] = useState("");
+  const [checkoutLoading, setCheckoutLoading] = useState("");
+
+  const outputLanguageOptions = [
+    { value: "nl", label: t("generation.lang.nl") },
+    { value: "en", label: t("generation.lang.en") },
+    { value: "pl", label: t("generation.lang.pl") },
+    { value: "es", label: t("generation.lang.es") },
+    { value: "fr", label: t("generation.lang.fr") },
+    { value: "de", label: t("generation.lang.de") },
+    { value: "pt", label: t("generation.lang.pt") },
+    { value: "it", label: t("generation.lang.it") },
+    { value: "ar", label: t("generation.lang.ar") },
+    { value: "zh", label: t("generation.lang.zh") },
+    { value: "ja", label: t("generation.lang.ja") },
+    { value: "he", label: t("generation.lang.he") },
+    { value: "af", label: t("generation.lang.af") },
+    { value: "sw", label: t("generation.lang.sw") },
+    { value: "am", label: t("generation.lang.am") },
+    { value: "ha", label: t("generation.lang.ha") },
+    { value: "yo", label: t("generation.lang.yo") },
+    { value: "zu", label: t("generation.lang.zu") },
+    { value: "srn-nl", label: t("generation.lang.srn") },
+    { value: "straat-nl", label: t("generation.lang.straat") },
+  ];
 
   useEffect(() => {
     loadStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadStatus() {
     try {
       const user = getUser();
-      const res = await fetch("/api/phase4/status", {
+      const res = await apiFetch("/api/phase4/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id }),
@@ -43,26 +74,22 @@ export default function Phase4Options({
     setLoadingKey(optionKey);
     try {
       if (!post) {
-        setError("Geen post gevonden om aan te passen.");
-        return;
-      }
-
-      if (
-        (optionKey === "tone" || optionKey === "rephrase") &&
-        Array.isArray(variants) &&
-        variants.length >= 3
-      ) {
-        setError("Maximaal 3 varianten per sessie.");
+        setError(t("phase4.error.missingPost"));
         return;
       }
 
       if (optionKey === "tone" && !tone.trim()) {
-        setError("Vul een toon of accent in.");
+        setError(t("phase4.error.tone"));
+        return;
+      }
+
+      if (optionKey === "language" && !outputLanguage) {
+        setError(t("phase4.error.language"));
         return;
       }
 
       const user = getUser();
-      const res = await fetch("/api/phase4/option", {
+      const res = await apiFetch("/api/phase4/option", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -70,26 +97,30 @@ export default function Phase4Options({
           optionKey,
           post,
           tone: optionKey === "tone" ? tone : undefined,
+          targetLanguage: optionKey === "language" ? outputLanguage : undefined,
         }),
       });
       const data = await res.json();
       if (res.ok && data?.ok) {
-        const reason = formatReason(data.debitedFor);
+        const reason = t(formatReason(data.debitedFor));
         const cost = data.cost ?? 0;
         const coinsLeft = data.coinsLeft ?? 0;
-        setAction(
-          `Afschrijving gelukt: ${cost} coin(s) voor ${reason}. Nieuw saldo: ${coinsLeft}.`
-        );
+        setAction(`${t("phase4.action.success", { cost, reason, coinsLeft })} ${t("phase4.action.backHint")}`);
         setCoins(coinsLeft);
         if (data.post) {
-          const label =
-            optionKey === "tone" ? `Toon: ${tone.trim()}` : "Herformuleerd";
+          const selectedLangLabel =
+            outputLanguageOptions.find((entry) => entry.value === outputLanguage)?.label || outputLanguage;
+          const label = optionKey === "tone"
+            ? `${t("phase4.variant.tonePrefix")}: ${tone.trim()}`
+            : optionKey === "language"
+              ? `${t("phase4.variant.languagePrefix")}: ${selectedLangLabel}`
+              : t("phase4.variant.rephrased");
           onVariantAdd({
             text: data.post,
             label,
             accent: optionKey === "tone" ? tone.trim() : undefined,
-            type: optionKey === "tone" ? "tone" : "rephrase",
-            kind: optionKey === "tone" ? "tone" : "rephrase",
+            type: optionKey === "tone" ? "tone" : optionKey === "language" ? "language" : "rephrase",
+            kind: optionKey === "tone" ? "tone" : optionKey === "language" ? "language" : "rephrase",
           });
         }
         if (Array.isArray(data.hashtags)) {
@@ -98,141 +129,303 @@ export default function Phase4Options({
           );
         }
       } else {
-        setError(data?.error || "Actie mislukt");
+        if (data?.error === "Variant limit reached") {
+          setError(t("phase4.error.limit"));
+        } else if (data?.error === "Insufficient coins") {
+          setError(t("coins.note.lock"));
+        } else {
+          setError(data?.error || t("phase4.error.action"));
+        }
       }
     } catch {
-      setError("Actie mislukt");
+      setError(t("phase4.error.action"));
     } finally {
       setLoadingKey("");
     }
   }
 
+  async function startCheckout(bundleKey) {
+    setCheckoutError("");
+    setCheckoutLoading(bundleKey);
+    try {
+      const user = getUser();
+      const res = await apiFetch("/api/phase4/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          bundle: bundleKey,
+          returnTo: "packages",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        setCheckoutError(data?.error || t("coins.error.checkout"));
+      }
+    } catch {
+      setCheckoutError(t("coins.error.checkout"));
+    } finally {
+      setCheckoutLoading("");
+    }
+  }
+
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.card}>
-        <h2>Meer opties</h2>
+    <>
+      <VideoBackground
+        videoSrc={VIDEO_BG.packages.video}
+        startAtSeconds={1}
+        showFallback={false}
+      />
 
-        <div style={styles.section}>
-          <h3>Coinsaldo</h3>
-          <div style={styles.row}>
-            <strong>Saldo:</strong>
-            <span>{coins ?? 0} coins</span>
+      <div style={styles.wrapper}>
+        <div style={styles.scrollContent}>
+          <div style={styles.logoWrap}>
+            <img src="/video/logo.png" alt="POST THIS logo" style={styles.logo} />
           </div>
-          {action && <p style={styles.success}>{action}</p>}
-        </div>
 
-        {error && <p style={styles.error}>{error}</p>}
+          <div style={styles.cardsColumn}>
+            <div style={styles.card}>
+              <h3 style={{ marginTop: 0, marginBottom: 8 }}>{t("phase4.title")}</h3>
+              <div style={styles.row}>
+                <strong>{t("phase4.balance")}</strong>
+                <span>{coins ?? 0} coins</span>
+              </div>
+              {action && <p style={styles.success}>{action}</p>}
+              {error && <p style={styles.error}>{error}</p>}
+            </div>
 
-        <div style={styles.section}>
-          <h3>Extra opties (per gebruik)</h3>
-          <div style={styles.optionRow}>
-            <span>Toonkeuze — 2 coins</span>
-            <button
-              onClick={() => applyOption("tone")}
-              disabled={loadingKey === "tone"}
-            >
-              Gebruik
-            </button>
+            <div style={styles.card}>
+              <h3 style={{ marginTop: 0, marginBottom: 8 }}>{t("phase4.extra")}</h3>
+              <div style={styles.optionRow}>
+                <span>{t("phase4.option.tone")}</span>
+                <button
+                  style={styles.button(loadingKey === "tone")}
+                  onClick={() => applyOption("tone")}
+                  disabled={loadingKey === "tone"}
+                >
+                  {t("phase4.use")}
+                </button>
+              </div>
+              <input
+                value={tone}
+                onChange={(event) => setTone(event.target.value)}
+                placeholder={t("phase4.tonePlaceholder")}
+                style={styles.input}
+              />
+              <div style={styles.optionRow}>
+                <span>{t("phase4.option.hashtags")}</span>
+                <button
+                  style={styles.button(loadingKey === "hashtags")}
+                  onClick={() => applyOption("hashtags")}
+                  disabled={loadingKey === "hashtags"}
+                >
+                  {t("phase4.use")}
+                </button>
+              </div>
+              <div style={styles.optionRow}>
+                <span>{t("phase4.option.rephrase")}</span>
+                <button
+                  style={styles.button(loadingKey === "rephrase")}
+                  onClick={() => applyOption("rephrase")}
+                  disabled={loadingKey === "rephrase"}
+                >
+                  {t("phase4.use")}
+                </button>
+              </div>
+
+              <div style={styles.optionRow}>
+                <span>{t("phase4.option.language")}</span>
+                <button
+                  style={styles.button(loadingKey === "language")}
+                  onClick={() => applyOption("language")}
+                  disabled={loadingKey === "language"}
+                >
+                  {t("phase4.use")}
+                </button>
+              </div>
+              <select
+                value={outputLanguage}
+                onChange={(event) => setOutputLanguage(event.target.value)}
+                style={styles.input}
+              >
+                {outputLanguageOptions.map((entry) => (
+                  <option key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+
+              <p style={styles.note}>{t("phase4.note")}</p>
+
+              {Array.isArray(hashtags) && hashtags.length > 0 && (
+                <p style={styles.note}>
+                  {t("phase4.note.hashtags")}
+                </p>
+              )}
+            </div>
+
+            <div style={styles.card}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button style={styles.button(false)} onClick={onBack}>{t("phase4.back")}</button>
+                <button style={styles.button(false)} onClick={onRegenerate}>{t("generation.regenerate")}</button>
+              </div>
+            </div>
+
+            <div style={styles.card}>
+              <h3 style={{ marginTop: 0, marginBottom: 8 }}>{t("coins.buy")}</h3>
+              <div style={styles.optionRow}>
+                <span>20 coins — EUR 10,00</span>
+                <button
+                  style={styles.button(checkoutLoading === "20")}
+                  onClick={() => startCheckout("20")}
+                  disabled={checkoutLoading === "20"}
+                >
+                  {t("coins.buyBtn")}
+                </button>
+              </div>
+              <div style={styles.optionRow}>
+                <span>50 coins — EUR 22,50</span>
+                <button
+                  style={styles.button(checkoutLoading === "50")}
+                  onClick={() => startCheckout("50")}
+                  disabled={checkoutLoading === "50"}
+                >
+                  {t("coins.buyBtn")}
+                </button>
+              </div>
+              <div style={styles.optionRow}>
+                <span>100 coins — EUR 40,00</span>
+                <button
+                  style={styles.button(checkoutLoading === "100")}
+                  onClick={() => startCheckout("100")}
+                  disabled={checkoutLoading === "100"}
+                >
+                  {t("coins.buyBtn")}
+                </button>
+              </div>
+              {checkoutError && <p style={styles.error}>{checkoutError}</p>}
+            </div>
           </div>
-          <input
-            value={tone}
-            onChange={(event) => setTone(event.target.value)}
-            placeholder="Welke toon of accent?"
-            style={styles.input}
-          />
-          <div style={styles.optionRow}>
-            <span>Hashtag-suggesties — 1 coin</span>
-            <button
-              onClick={() => applyOption("hashtags")}
-              disabled={loadingKey === "hashtags"}
-            >
-              Gebruik
-            </button>
-          </div>
-          <div style={styles.optionRow}>
-            <span>Herformuleren — 1 coin</span>
-            <button
-              onClick={() => applyOption("rephrase")}
-              disabled={loadingKey === "rephrase"}
-            >
-              Gebruik
-            </button>
-          </div>
-          <p style={styles.note}>Extra opties starten geen nieuwe generatie.</p>
-          {!action && (
-            <p style={styles.note}>
-              Extra opties starten geen nieuwe generatie.
-            </p>
-          )}
-        </div>
-
-        {Array.isArray(hashtags) && hashtags.length > 0 && (
-          <p style={styles.note}>
-            Hashtags beheer je onder de post op het output-scherm.
-          </p>
-        )}
-
-        <div style={{ marginTop: 20 }}>
-          <button onClick={onBack}>Terug naar post</button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
 function formatReason(key) {
-  if (key === "tone") return "toonkeuze";
-  if (key === "hashtags") return "hashtag-suggesties";
-  if (key === "rephrase") return "herformulering";
-  return "actie";
+  if (key === "tone") return "phase4.reason.tone";
+  if (key === "hashtags") return "phase4.reason.hashtags";
+  if (key === "rephrase") return "phase4.reason.rephrase";
+  if (key === "language") return "phase4.reason.language";
+  return "phase4.reason.default";
 }
 
 const styles = {
-  wrapper: {
-    minHeight: "100vh",
+  logoWrap: {
+    width: "100%",
     display: "flex",
-    alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F6F3EE",
+    alignItems: "center",
+    position: "relative",
+    marginTop: "-0.8cm",
+    marginBottom: "calc(10px + 0.9cm)",
+    pointerEvents: "none",
+  },
+  logo: {
+    maxWidth: "min(430px, 96vw)",
+    width: "96vw",
+    height: "auto",
+    objectFit: "contain",
+    display: "block",
+    background: "none",
+    boxShadow: "none",
+    marginLeft: "auto",
+    marginRight: "auto",
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  wrapper: {
+    width: "100vw",
+    height: "100dvh",
+    minHeight: "100dvh",
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    position: "relative",
+    overflowY: "auto",
+    overflowX: "hidden",
+    zIndex: 1,
+  },
+  scrollContent: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    paddingTop: 20,
+    paddingBottom: "calc(24px + 1.5cm)",
+    boxSizing: "border-box",
+  },
+  cardsColumn: {
+    width: "90vw",
+    maxWidth: 340,
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    margin: "0 auto",
   },
   card: {
-    width: 600,
-    padding: 32,
-    background: "#FFFFFF",
-    borderRadius: 12,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+    border: "3px solid #145C63",
+    borderRadius: 18,
+    background: "rgba(250,250,248,0.50)",
+    boxShadow: "0 2px 12px 0 rgba(60,60,40,0.04)",
+    padding: 12,
+    boxSizing: "border-box",
   },
   section: {
-    marginTop: 20,
+    marginTop: 10,
   },
   row: {
     display: "flex",
     justifyContent: "space-between",
-    marginTop: 8,
+    marginTop: 6,
   },
   optionRow: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 16,
+    gap: 10,
     marginTop: 10,
   },
   input: {
     width: "100%",
+    boxSizing: "border-box",
     marginTop: 8,
-    padding: "8px 10px",
-    borderRadius: 6,
+    padding: "10px",
+    borderRadius: 8,
     border: "1px solid #ccc",
   },
   note: {
     marginTop: 8,
-    color: "#555",
+    color: "#2A2A2A",
   },
   success: {
     marginTop: 8,
     color: "#2f6a2f",
   },
   error: {
+    marginTop: 8,
+    marginBottom: 0,
     color: "#A33",
   },
+  button: (disabled) => ({
+    ...primaryHomeButtonStyle,
+    marginTop: 0,
+    fontSize: 15,
+    padding: "9px 14px",
+    opacity: disabled ? 0.55 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+  }),
 };

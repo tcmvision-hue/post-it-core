@@ -1,19 +1,27 @@
+import VideoBackground from "../../components/VideoBackground";
+import { VIDEO_BG } from "./VideoBackgrounds";
+
 export default function FrontPage({ onContinue }) {
   return (
-    <div className="frontpage">
-      <h1>Welkom bij POST IT.</h1>
+    <>
+      <VideoBackground
+        fallbackSrc={VIDEO_BG.welcome.fallback}
+        alt="Groep mensen in ochtendlicht"
+      />
+      <div className="frontpage">
+      <h1>Welkom bij POST THIS.</h1>
 
       <p>
-        POST IT is een dagelijkse post die meebeweegt met wat er vandaag speelt.
+        POST THIS is een dagelijkse post die meebeweegt met wat er vandaag speelt.
         Niet om iets van u te vragen, maar om iets zichtbaar te maken.
       </p>
 
       <p>
-        <strong>POST IT heeft altijd een post voor u.</strong><br />
+        <strong>POST THIS heeft altijd een post voor u.</strong><br />
         De vorm kan verschillen, maar er is altijd iets dat vandaag past.
       </p>
 
-      <p>POST IT kan verschillende vormen aannemen.</p>
+      <p>POST THIS kan verschillende vormen aannemen.</p>
 
       <p>
         Soms is het logisch en zakelijk.<br />
@@ -39,6 +47,7 @@ export default function FrontPage({ onContinue }) {
       <button onClick={onContinue}>
         Verder
       </button>
-    </div>
+      </div>
+    </>
   );
 }

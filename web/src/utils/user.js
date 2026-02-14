@@ -1,4 +1,8 @@
 function generateId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
   return (
     "u-" +
     Math.random().toString(36).slice(2) +
@@ -8,7 +12,7 @@ function generateId() {
 }
 
 export function getUser() {
-  const stored = localStorage.getItem("post-it:user");
+  const stored = localStorage.getItem("post-this:user");
 
   if (stored) {
     return JSON.parse(stored);
@@ -20,6 +24,6 @@ export function getUser() {
     createdAt: Date.now(),
   };
 
-  localStorage.setItem("post-it:user", JSON.stringify(user));
+  localStorage.setItem("post-this:user", JSON.stringify(user));
   return user;
 }

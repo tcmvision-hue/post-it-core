@@ -87,42 +87,97 @@ export default function Reflection({ onFadeOutStart, onDone }) {
         position: "fixed",
         inset: 0,
         zIndex: 9999,
+        isolation: "isolate",
         pointerEvents: "none",
-        backgroundColor: fadingOut ? "rgba(255,255,255,0)" : "rgba(255,255,255,0.98)",
+        backgroundColor: "transparent",
         opacity: visible ? (fadingOut ? 0 : 1) : 0,
         transition: `opacity ${fadingOut ? FADE_OUT_DURATION : FADE_IN_DURATION}ms cubic-bezier(0.7, 0.2, 0.2, 1)`,
-        boxShadow: "0 0 80px 0 rgba(0,0,0,0.12)",
+        boxShadow: "none",
       }}
     >
-      {/* Frames */}
-      <img
-        src={REFLECTION_FRAMES[frameIndex]}
-        alt=""
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          width: "100vw",
+          height: "100vh",
+          overflow: "hidden",
+        }}
+      >
+        <img
+          src={REFLECTION_FRAMES[frameIndex]}
+          alt=""
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: isMobile ? "50% 10%" : "50% 4%",
+            filter: "brightness(1.02)",
+            transition: "filter 600ms cubic-bezier(0.7,0.2,0.2,1)",
+          }}
+        />
+      </div>
+
+      <div
         style={{
           width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          objectPosition: isMobile ? "50% 12%" : "50% 0%",
-          filter: "blur(0.5px) brightness(1.04)",
-          transition: "filter 600ms cubic-bezier(0.7,0.2,0.2,1)",
-        }}
-      />
-
-      {/* Logo */}
-      <img
-        src={REFLECTION_LOGO}
-        alt="Logo"
-        style={{
-          position: "absolute",
-          left: isMobile ? "-3%" : "6%",
-          top: isMobile ? "49%" : "38%",
-          width: isMobile ? "min(240px, 60vw)" : "min(420px, 60vw)",
-          transform: isMobile ? "translateY(-50%)" : "none",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          position: "fixed",
+          top: "-1.5cm",
+          left: 0,
+          zIndex: 10,
+          pointerEvents: "none",
           opacity: logoVisible ? 1 : 0,
           transition: `opacity ${FADE_IN_DURATION}ms cubic-bezier(0.7,0.2,0.2,1)`,
-          filter: logoVisible ? "drop-shadow(0 2px 16px rgba(0,0,0,0.10))" : "none",
         }}
-      />
+      >
+        <img
+          src={REFLECTION_LOGO}
+          alt="POST THIS logo"
+          style={{
+            maxWidth: "min(390px, 90vw)",
+            width: "90vw",
+            height: "auto",
+            objectFit: "contain",
+            display: "block",
+            background: "none",
+            boxShadow: "none",
+            marginLeft: "auto",
+            marginRight: "auto",
+            marginTop: 0,
+            marginBottom: 0,
+          }}
+        />
+      </div>
+
+      <div
+        style={{
+          width: "90vw",
+          maxWidth: 340,
+          padding: 28,
+          border: "3px solid #145C63",
+          borderRadius: 18,
+          background: "rgba(250,250,248,0.50)",
+          textAlign: "center",
+          boxSizing: "border-box",
+          boxShadow: "0 2px 12px 0 rgba(60,60,40,0.04)",
+          position: "fixed",
+          left: "50%",
+          transform: "translateX(-50%)",
+          bottom: "calc(24px + 1.5cm)",
+          zIndex: 12,
+        }}
+      >
+        <h2 style={{ marginTop: 0, marginBottom: 10 }}>Een moment alstublieft</h2>
+        <p style={{ marginTop: 10, marginBottom: 0, lineHeight: 1.45 }}>
+          We zijn uw post aan het voorbereiden.
+        </p>
+      </div>
     </div>
   );
 }
