@@ -1,0 +1,18 @@
+{
+  "name": "POST THIS",
+  "short_name": "POST THIS",
+  "description": "POST THIS mobiele web app",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F3F9F9",
+  "theme_color": "#145C63",
+  "icons": [
+    {
+      "src": "/src/ui/components/Reflection/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

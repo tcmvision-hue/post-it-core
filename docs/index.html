@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>POST THIS • Download</title>
+    <meta name="theme-color" content="#145C63" />
+    <style>
+      :root {
+        --brand: #145C63;
+        --brand-dark: #0D4A52;
+        --bg: #F3F9F9;
+        --text: #174F56;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: linear-gradient(180deg, #0F4C5C 0%, #145C63 55%, #1B6C74 100%);
+        color: var(--text);
+      }
+      .card {
+        width: min(92vw, 560px);
+        background: #fff;
+        border-radius: 18px;
+        padding: 36px 28px;
+        text-align: center;
+        box-shadow: 0 18px 45px rgba(11, 58, 64, 0.22);
+      }
+      .logo {
+        width: 96px;
+        height: 96px;
+        border-radius: 20px;
+        background: #fff;
+        object-fit: contain;
+        padding: 10px;
+        margin: 0 auto 16px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        color: var(--brand);
+        font-size: 34px;
+      }
+      p { line-height: 1.6; margin: 0 0 14px; }
+      .btn {
+        display: inline-block;
+        margin-top: 10px;
+        border: 0;
+        border-radius: 12px;
+        background: var(--brand);
+        color: #fff;
+        padding: 12px 22px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn:hover { background: var(--brand-dark); }
+      .hint { font-size: 14px; opacity: .95; margin-top: 14px; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <img
+        class="logo"
+        src="https://raw.githubusercontent.com/tcmvision-hue/post-it-core/Post-this-met-ai-spraak-meer-opties-en-betalingen/web/src/ui/components/Reflection/logo.png"
+        alt="POST THIS logo"
+      />
+      <h1>POST THIS</h1>
+      <p>Vaste downloadpagina voor mobiel testen.</p>
+      <button id="installBtn" class="btn" type="button">Installeer als app</button>
+      <p id="hint" class="hint">Als dit niet direct werkt: browsermenu → Toevoegen aan startscherm.</p>
+    </main>
+
+    <script>
+      let deferredPrompt = null;
+      const btn = document.getElementById('installBtn');
+
+      window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        deferredPrompt = event;
+      });
+
+      btn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+      });
+    </script>
+  </body>
+</html>

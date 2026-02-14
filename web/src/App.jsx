@@ -75,8 +75,25 @@ export default function App() {
     typeof window === "undefined"
       ? ""
       : window.location.pathname.replace(/\/+$/, "");
+  const downloadQuery =
+    typeof window === "undefined"
+      ? ""
+      : window.location.search;
+  const downloadParams = new URLSearchParams(downloadQuery);
+  const isDownloadMode =
+    downloadParams.get("download") === "1" ||
+    downloadParams.get("page")?.toLowerCase() === "download";
+  const isStandalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia?.("(display-mode: standalone)")?.matches ||
+      window.navigator.standalone === true);
 
-  if (downloadPath.toLowerCase() === "/post-this") {
+  if (
+    !isStandalone &&
+    downloadPath.toLowerCase() === "/post-this" ||
+    (!isStandalone && downloadPath.toLowerCase() === "/download") ||
+    (!isStandalone && isDownloadMode)
+  ) {
     return <DownloadPage />;
   }
 
