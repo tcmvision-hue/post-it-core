@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { getUser } from "./utils/user";
+import { apiFetch } from "./utils/api";
+import { useI18n } from "./i18n/I18nContext";
 
 /* UI – HOME */
 import Welcome from "./ui/home/Welcome";
 import Explanation from "./ui/home/Explanation";
 import Today from "./ui/home/Today";
 import CoinsGate from "./ui/home/CoinsGate";
+import { VIDEO_BG } from "./ui/home/VideoBackgrounds";
 
 /* INTAKE */
 import Intake from "./ui/home/Intake";
@@ -18,6 +21,7 @@ import Generation from "./ui/home/Generation";
 import SelectPost from "./ui/home/SelectPost";
 import Output from "./ui/home/Output";
 import Phase4Options from "./ui/home/Phase4Options";
+import Finished from "./ui/home/Finished";
 import Download from "./ui/download/Download";
 
 const PHASES = {
@@ -83,9 +87,80 @@ function getReturnPhase() {
   return PHASES.WELCOME;
 }
 
+let todayVideoPrimePromise = null;
+
+function primeTodayVideoStartFrame() {
+  if (typeof document === "undefined") return Promise.resolve();
+  if (todayVideoPrimePromise) return todayVideoPrimePromise;
+
+  todayVideoPrimePromise = new Promise((resolve) => {
+    const video = document.createElement("video");
+    let settled = false;
+
+    const cleanup = () => {
+      video.onloadedmetadata = null;
+      video.onseeked = null;
+      video.oncanplay = null;
+      video.onerror = null;
+      clearTimeout(timeoutId);
+    };
+
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    const timeoutId = setTimeout(done, 5000);
+
+    video.src = VIDEO_BG.today.video;
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+
+    video.onloadedmetadata = () => {
+      try {
+        video.currentTime = 1;
+      } catch {
+        done();
+      }
+    };
+
+    video.onseeked = () => {
+      if (video.currentTime >= 0.95 && video.readyState >= 2) {
+        done();
+      }
+    };
+    video.oncanplay = () => {
+      if (video.currentTime >= 0.95 && video.readyState >= 2) {
+        done();
+      }
+    };
+    video.onerror = done;
+
+    try {
+      video.load();
+    } catch {
+      done();
+    }
+  });
+
+  return todayVideoPrimePromise;
+}
+
 export default function App() {
+  const {
+    lang,
+    shouldPromptLanguage,
+    detectedLocalLang,
+    confirmLanguageChoice,
+    getLanguageName,
+    t,
+  } = useI18n();
   const isDownloadRoute =
-    typeof window !== "undefined" && window.location.pathname === "/download";
+    typeof window !== "undefined" &&
+    window.location.pathname.replace(/\/+$/, "") === "/download";
   const [phase, setPhase] = useState(getReturnPhase);
 
   const [intake, setIntake] = useState(() => loadStoredIntake());
@@ -103,12 +178,103 @@ export default function App() {
     }
   }, []);
 
-  if (isDownloadRoute) {
-    return <Download />;
-  }
+  useEffect(() => {
+    if (shouldPromptLanguage) return;
+
+    const user = getUser();
+    apiFetch("/api/profile/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        profileId: user.id,
+        language: lang,
+      }),
+    }).catch(() => {
+      // profiel bootstrap probeert opnieuw op volgende call
+    });
+  }, [lang, shouldPromptLanguage]);
+
+  useEffect(() => {
+    if (phase === PHASES.EXPLANATION) {
+      primeTodayVideoStartFrame();
+    }
+  }, [phase]);
 
   // ⬇️ Alleen visuele timing
   const [showGeneration, setShowGeneration] = useState(false);
+
+  useEffect(() => {
+    const noScrollPhases = [
+      PHASES.WELCOME,
+      PHASES.EXPLANATION,
+      PHASES.TODAY,
+      PHASES.INTAKE,
+    ];
+
+    const shouldLock = noScrollPhases.includes(phase);
+    const scrollY = window.scrollY;
+
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevBodyOverflowX = document.body.style.overflowX;
+    const prevBodyOverflowY = document.body.style.overflowY;
+    const prevBodyPosition = document.body.style.position;
+    const prevBodyTop = document.body.style.top;
+    const prevBodyLeft = document.body.style.left;
+    const prevBodyRight = document.body.style.right;
+    const prevBodyWidth = document.body.style.width;
+    const prevBodyTouchAction = document.body.style.touchAction;
+    const prevBodyOverscroll = document.body.style.overscrollBehavior;
+
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevHtmlOverflowX = document.documentElement.style.overflowX;
+    const prevHtmlOverflowY = document.documentElement.style.overflowY;
+    const prevHtmlOverscroll = document.documentElement.style.overscrollBehavior;
+
+    if (shouldLock) {
+      document.body.style.overflow = "hidden";
+      document.body.style.overflowX = "hidden";
+      document.body.style.overflowY = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = "0";
+      document.body.style.right = "0";
+      document.body.style.width = "100%";
+      document.body.style.touchAction = "none";
+      document.body.style.overscrollBehavior = "none";
+
+      document.documentElement.style.overflow = "hidden";
+      document.documentElement.style.overflowX = "hidden";
+      document.documentElement.style.overflowY = "hidden";
+      document.documentElement.style.overscrollBehavior = "none";
+    }
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.body.style.overflowX = prevBodyOverflowX;
+      document.body.style.overflowY = prevBodyOverflowY;
+      document.body.style.position = prevBodyPosition;
+      document.body.style.top = prevBodyTop;
+      document.body.style.left = prevBodyLeft;
+      document.body.style.right = prevBodyRight;
+      document.body.style.width = prevBodyWidth;
+      document.body.style.touchAction = prevBodyTouchAction;
+      document.body.style.overscrollBehavior = prevBodyOverscroll;
+
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.documentElement.style.overflowX = prevHtmlOverflowX;
+      document.documentElement.style.overflowY = prevHtmlOverflowY;
+
+      document.documentElement.style.overscrollBehavior = prevHtmlOverscroll;
+
+      if (shouldLock) {
+        window.scrollTo(0, scrollY);
+      }
+    };
+  }, [phase]);
+
+  if (isDownloadRoute) {
+    return <Download />;
+  }
 
   function ensureCycleMeta() {
     if (cycleMeta) return cycleMeta;
@@ -152,21 +318,95 @@ export default function App() {
     };
   }
 
+  function restartGenerationFlow() {
+    setConfirmError("");
+    setGenerations([]);
+    setVariants([]);
+    setSelectedVariantId("");
+    setHashtags([]);
+    setShowGeneration(false);
+    setPhase(PHASES.COINS);
+  }
+
+  async function playShutterSound() {
+    if (typeof window === "undefined") return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const context = new AudioContextClass();
+    try {
+      await context.resume();
+      const now = context.currentTime;
+
+      const click = context.createOscillator();
+      const clickGain = context.createGain();
+      click.type = "square";
+      click.frequency.setValueAtTime(1700, now);
+      clickGain.gain.setValueAtTime(0.001, now);
+      clickGain.gain.exponentialRampToValueAtTime(0.16, now + 0.003);
+      clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+      click.connect(clickGain);
+      clickGain.connect(context.destination);
+      click.start(now);
+      click.stop(now + 0.05);
+
+      const bufferSize = context.sampleRate * 0.1;
+      const noiseBuffer = context.createBuffer(1, bufferSize, context.sampleRate);
+      const channel = noiseBuffer.getChannelData(0);
+      for (let index = 0; index < bufferSize; index += 1) {
+        channel[index] = Math.random() * 2 - 1;
+      }
+      const noise = context.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const noiseFilter = context.createBiquadFilter();
+      noiseFilter.type = "highpass";
+      noiseFilter.frequency.setValueAtTime(600, now);
+      const noiseGain = context.createGain();
+      noiseGain.gain.setValueAtTime(0.0001, now + 0.016);
+      noiseGain.gain.exponentialRampToValueAtTime(0.11, now + 0.03);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(context.destination);
+      noise.start(now + 0.016);
+      noise.stop(now + 0.12);
+
+      await new Promise((resolve) => setTimeout(resolve, 160));
+    } catch {
+      // no-op when audio cannot play
+    } finally {
+      context.close().catch(() => {});
+    }
+  }
+
+  async function handleTodayContinue() {
+    await playShutterSound();
+    setPhase(PHASES.INTAKE);
+  }
+
+  async function continueToToday() {
+    await primeTodayVideoStartFrame();
+    setPhase(PHASES.TODAY);
+  }
+
   async function confirmSelection(postPayload) {
     setConfirmError("");
     try {
       const user = getUser();
-      const res = await fetch("/api/phase4/confirm", {
+      const normalizedInput = normalizePostPayload(postPayload);
+      const isOfficialSelection = postPayload?.kind === "official"
+        || normalizedInput.label === "Origineel";
+      const res = await apiFetch("/api/phase4/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ userId: user.id, isOfficial: isOfficialSelection }),
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
         setConfirmError(data?.error || "Bevestigen mislukt");
         return;
       }
-      const normalized = normalizePostPayload(postPayload);
+      const normalized = normalizedInput;
       const generationVariants = (generations || []).map((entry, index) => {
         const normalizedEntry = normalizePostPayload(entry);
         const isOfficial = entry?.kind === "official";
@@ -212,16 +452,81 @@ export default function App() {
 
   /* HOME */
   if (phase === PHASES.WELCOME) {
-    return <Welcome onContinue={() => setPhase(PHASES.EXPLANATION)} />;
+    return (
+      <>
+        <Welcome onContinue={() => setPhase(PHASES.EXPLANATION)} />
+        {shouldPromptLanguage && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.35)",
+              zIndex: 50,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 18,
+            }}
+          >
+            <div
+              style={{
+                width: "90vw",
+                maxWidth: 360,
+                border: "3px solid #145C63",
+                borderRadius: 18,
+                background: "rgba(250,250,248,0.96)",
+                boxShadow: "0 2px 12px 0 rgba(60,60,40,0.04)",
+                padding: 18,
+                boxSizing: "border-box",
+              }}
+            >
+              <h3 style={{ marginTop: 0, marginBottom: 10 }}>{t("lang.modal.title")}</h3>
+              <p style={{ marginTop: 0, marginBottom: 14, lineHeight: 1.4 }}>
+                {t("lang.modal.text")}
+              </p>
+              <button
+                style={{
+                  width: "100%",
+                  marginBottom: 8,
+                  border: "1px solid #145C63",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  background: "#145C63",
+                  color: "#fff",
+                  cursor: "pointer",
+                }}
+                onClick={() => confirmLanguageChoice(detectedLocalLang)}
+              >
+                {t("lang.modal.local")}: {getLanguageName(detectedLocalLang)}
+              </button>
+              <button
+                style={{
+                  width: "100%",
+                  border: "1px solid #145C63",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  background: "#fff",
+                  color: "#145C63",
+                  cursor: "pointer",
+                }}
+                onClick={() => confirmLanguageChoice("en")}
+              >
+                {t("lang.modal.english")}
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
   }
 
   if (phase === PHASES.EXPLANATION) {
-    return <Explanation onContinue={() => setPhase(PHASES.TODAY)} />;
+    return <Explanation onContinue={continueToToday} />;
   }
 
   if (phase === PHASES.TODAY) {
     return (
-      <Today onContinue={() => setPhase(PHASES.INTAKE)} />
+      <Today onContinue={handleTodayContinue} />
     );
   }
 
@@ -300,6 +605,7 @@ export default function App() {
         posts={generations}
         confirmError={confirmError}
         onSelect={(post) => confirmSelection(post)}
+        onRegenerate={restartGenerationFlow}
       />
     );
   }
@@ -327,6 +633,9 @@ export default function App() {
         }
         cycleMeta={cycleMeta}
         onViewPackages={() => setPhase(PHASES.PACKAGES)}
+        onRegenerate={() => {
+          restartGenerationFlow();
+        }}
         onFinishSession={() => {
           clearStoredIntake();
           setCycleMeta(null);
@@ -346,14 +655,24 @@ export default function App() {
           variants.find((variant) => variant.id === selectedVariantId)
             ?.text || ""
         }
-        variants={variants}
         hashtags={hashtags}
         onVariantAdd={(variant) => {
-          setVariants((prev) => [...prev, variant]);
-          setSelectedVariantId(variant.id);
+          const normalized = normalizePostPayload(variant);
+          const preparedVariant = createVariant(
+            {
+              ...normalized,
+              label: variant?.label || normalized.label || "Variant",
+              accent: variant?.accent || normalized.accent || variant?.label || "",
+              kind: variant?.kind || variant?.type || "rephrase",
+            },
+            "generation"
+          );
+          setVariants((prev) => [...prev, preparedVariant]);
+          setSelectedVariantId(preparedVariant.id);
           setHashtags([]);
         }}
         onHashtagsUpdate={(next) => setHashtags(next || [])}
+        onRegenerate={restartGenerationFlow}
         onBack={() => setPhase(PHASES.FINAL)}
       />
     );
@@ -361,21 +680,7 @@ export default function App() {
 
   /* EINDSCHERM */
   if (phase === PHASES.FINISHED) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#F6F3EE",
-        }}
-      >
-        <h1 style={{ marginBottom: 24 }}>POST THIS</h1>
-        <p>Bedankt voor het gebruiken van POST THIS.</p>
-      </div>
-    );
+    return <Finished onDone={() => setPhase(PHASES.WELCOME)} />;
   }
 
   return null;
