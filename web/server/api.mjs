@@ -42,7 +42,12 @@ const COIN_BUNDLES = {
 };
 
 function isCoinsSimulationEnabled() {
-  const raw = String(process.env.COINS_SIMULATION ?? "true").toLowerCase();
+  const raw = String(process.env.COINS_SIMULATION ?? "false").toLowerCase();
+  return !["0", "false", "off", "no"].includes(raw);
+}
+
+function areCoinBlocksDisabled() {
+  const raw = String(process.env.COIN_BLOCKS_DISABLED ?? "true").toLowerCase();
   return !["0", "false", "off", "no"].includes(raw);
 }
 
@@ -840,13 +845,13 @@ app.post("/api/phase4/status", async (req, res) => {
       const cycle = getCycle(store, userId);
       const postNumNext = user.postCountToday + 1;
       const daySlotUsed = isDaySlotUsed(user);
-      const costToStart = daySlotUsed ? 1 : 0;
+      const costToStart = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
       return {
         coins: user.coins,
         postNumNext,
         daySlotUsed,
         costToStart,
-        extraGenerationCost: 1,
+        extraGenerationCost: areCoinBlocksDisabled() ? 0 : 1,
         paymentReconciled,
         __cookieState: { user, cycle },
       };
@@ -873,7 +878,7 @@ app.post("/api/phase4/start", async (req, res) => {
     const result = await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
       const daySlotUsed = isDaySlotUsed(user);
-      const costToStart = daySlotUsed ? 1 : 0;
+      const costToStart = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
 
       if (costToStart > 0 && user.coins < costToStart) {
         return {
@@ -972,21 +977,22 @@ app.post("/api/phase4/option", async (req, res) => {
         }
       }
 
-      if (user.coins < cost) {
+      const effectiveCost = areCoinBlocksDisabled() ? 0 : cost;
+      if (user.coins < effectiveCost) {
         return {
           ok: false,
           error: "Insufficient coins",
           coins: user.coins,
-          cost,
+          cost: effectiveCost,
         };
       }
 
-      user.coins -= cost;
+      user.coins -= effectiveCost;
 
       return {
         ok: true,
         optionKey,
-        cost,
+        cost: effectiveCost,
         debitedFor: optionKey,
         coinsLeft: user.coins,
       };
@@ -1131,46 +1137,7 @@ app.post("/api/phase4/checkout", async (req, res) => {
 });
 
 app.post("/api/phase4/admin/grant-coins", async (req, res) => {
-  try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (!adminSecret) {
-      return res.status(500).json({ error: "Admin secret not configured" });
-    }
-
-    const providedSecret =
-      req.headers["x-admin-secret"] || req.body?.adminSecret;
-
-    if (providedSecret !== adminSecret) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
-    const { userId, coins } = req.body || {};
-    const coinsToGrant = Number(coins);
-
-    if (!userId || typeof userId !== "string") {
-      return res.status(400).json({ error: "Missing userId" });
-    }
-    if (!Number.isFinite(coinsToGrant) || coinsToGrant <= 0) {
-      return res.status(400).json({ error: "Invalid coins" });
-    }
-
-    const result = await withStore((store) => {
-      const user = ensureUser(store, userId);
-      user.coins = (Number(user.coins) || 0) + Math.floor(coinsToGrant);
-      return {
-        ok: true,
-        userId,
-        granted: Math.floor(coinsToGrant),
-        coins: user.coins,
-      };
-    });
-
-    setUserCookie(res, userId);
-    return res.json(result);
-  } catch (err) {
-    console.error("Admin grant coins error:", err);
-    return res.status(500).json({ error: "Grant failed" });
-  }
+  return res.status(403).json({ error: "Disabled" });
 });
 
 app.post(
@@ -1267,7 +1234,9 @@ app.post("/api/generate", async (req, res) => {
       const resolvedOutputLanguage =
         requestedLanguage === "auto" ? primaryLanguage : requestedLanguage;
 
-      const languageCost = resolvedOutputLanguage === primaryLanguage ? 0 : 3;
+      const languageCost = areCoinBlocksDisabled()
+        ? 0
+        : (resolvedOutputLanguage === primaryLanguage ? 0 : 3);
       if (languageCost > 0 && user.coins < languageCost) {
         return {
           ok: false,
@@ -1368,7 +1337,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
       }
 
       const daySlotUsed = isDaySlotUsed(user);
-      const cost = daySlotUsed ? 1 : 0;
+      const cost = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
 
       if (cost > 0 && user.coins < cost) {
         return {
@@ -1439,7 +1408,7 @@ app.post("/api/phase4/download-variant", async (req, res) => {
       return res.status(400).json({ error: "No confirmed post" });
     }
 
-    const cost = isOfficial ? 0 : 1;
+    const cost = areCoinBlocksDisabled() ? 0 : (isOfficial ? 0 : 1);
     if (cost === 0) {
       setUserCookie(res, userId);
       return res.json({ ok: true, cost: 0 });
