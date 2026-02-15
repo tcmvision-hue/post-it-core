@@ -544,14 +544,29 @@ async function generateHashtags(post) {
 }
 
 function getUserIdFromRequest(req) {
-  const cookieHeader = req.headers.cookie || "";
-  const parts = cookieHeader.split(";").map((p) => p.trim());
+  const cookies = parseCookieHeader(req.headers.cookie || "");
+  return cookies.post_it_uid || null;
+}
+
+function parseCookieHeader(cookieHeader) {
+  const out = {};
+  const raw = String(cookieHeader || "");
+  const parts = raw.split(";");
   for (const part of parts) {
-    if (part.startsWith("post_it_uid=")) {
-      return decodeURIComponent(part.split("=")[1]);
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex <= 0) continue;
+    const key = trimmed.slice(0, eqIndex).trim();
+    const value = trimmed.slice(eqIndex + 1).trim();
+    if (!key) continue;
+    try {
+      out[key] = decodeURIComponent(value);
+    } catch {
+      out[key] = value;
     }
   }
-  return null;
+  return out;
 }
 
 function resolveUserId(req, fallbackUserId) {
@@ -564,9 +579,92 @@ function resolveUserId(req, fallbackUserId) {
   return "";
 }
 
+const STATE_COOKIE_KEY = "post_it_state";
+
+function appendSetCookie(res, cookieValue) {
+  const existing = res.getHeader("Set-Cookie");
+  if (!existing) {
+    res.setHeader("Set-Cookie", cookieValue);
+    return;
+  }
+  if (Array.isArray(existing)) {
+    res.setHeader("Set-Cookie", [...existing, cookieValue]);
+    return;
+  }
+  res.setHeader("Set-Cookie", [String(existing), cookieValue]);
+}
+
+function readStateCookie(req, userId) {
+  const cookies = parseCookieHeader(req.headers.cookie || "");
+  const raw = cookies[STATE_COOKIE_KEY];
+  if (!raw) return null;
+  try {
+    const decoded = Buffer.from(raw, "base64url").toString("utf8");
+    const parsed = JSON.parse(decoded);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (String(parsed.userId || "") !== String(userId || "")) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStateCookie(res, userId, user, cycle) {
+  if (!userId || !user) return;
+  const payload = {
+    userId,
+    day: user.day || todayKey(),
+    postCountToday: Number(user.postCountToday) || 0,
+    coins: Number(user.coins) || 0,
+    cycle: cycle || null,
+    ts: Date.now(),
+  };
+  try {
+    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+    appendSetCookie(
+      res,
+      `${STATE_COOKIE_KEY}=${encoded}; Path=/; Max-Age=259200; SameSite=Lax; HttpOnly`
+    );
+  } catch {
+    // ignore serialization errors
+  }
+}
+
+function hydrateFromStateCookie(req, store, userId) {
+  const user = ensureUser(store, userId);
+  const state = readStateCookie(req, userId);
+  if (!state) return { user, cycle: getCycle(store, userId) };
+
+  const today = todayKey();
+  if (state.day === today) {
+    const count = Number(state.postCountToday);
+    if (Number.isFinite(count) && count > (Number(user.postCountToday) || 0)) {
+      user.postCountToday = count;
+    }
+  }
+
+  const coins = Number(state.coins);
+  if (Number.isFinite(coins) && coins > (Number(user.coins) || 0)) {
+    user.coins = coins;
+  }
+
+  if (
+    state.cycle &&
+    typeof state.cycle === "object" &&
+    state.cycle.day === today
+  ) {
+    const existing = getCycle(store, userId);
+    if (!existing || (Number(state.cycle.startedAt) || 0) >= (Number(existing.startedAt) || 0)) {
+      store.cycles[userId] = state.cycle;
+    }
+  }
+
+  return { user, cycle: getCycle(store, userId) };
+}
+
 function setUserCookie(res, userId) {
-  res.setHeader(
-    "Set-Cookie",
+  appendSetCookie(
+    res,
     `post_it_uid=${encodeURIComponent(userId)}; Path=/; SameSite=Lax; HttpOnly`
   );
 }
@@ -733,7 +831,8 @@ app.post("/api/phase4/status", async (req, res) => {
         paymentId
       );
       await reconcilePendingPaymentsForUser(store, userId);
-      const user = ensureUser(store, userId);
+      const { user } = hydrateFromStateCookie(req, store, userId);
+      const cycle = getCycle(store, userId);
       const postNumNext = user.postCountToday + 1;
       const daySlotUsed = isDaySlotUsed(user);
       const costToStart = daySlotUsed ? 1 : 0;
@@ -744,10 +843,13 @@ app.post("/api/phase4/status", async (req, res) => {
         costToStart,
         extraGenerationCost: 1,
         paymentReconciled,
+        __cookieState: { user, cycle },
       };
     });
 
     setUserCookie(res, userId);
+    writeStateCookie(res, userId, status.__cookieState?.user, status.__cookieState?.cycle);
+    delete status.__cookieState;
     res.json(status);
   } catch (err) {
     console.error("Phase4 status error:", err);
@@ -764,7 +866,7 @@ app.post("/api/phase4/start", async (req, res) => {
     }
 
     const result = await withStore((store) => {
-      const user = ensureUser(store, userId);
+      const { user } = hydrateFromStateCookie(req, store, userId);
       const daySlotUsed = isDaySlotUsed(user);
       const costToStart = daySlotUsed ? 1 : 0;
 
@@ -780,6 +882,7 @@ app.post("/api/phase4/start", async (req, res) => {
 
       const postNumber = user.postCountToday + 1;
       store.cycles[userId] = createCycle(userId, postNumber);
+      const cycle = getCycle(store, userId);
 
       return {
         ok: true,
@@ -787,6 +890,7 @@ app.post("/api/phase4/start", async (req, res) => {
         costToStart,
         daySlotUsed,
         coinsLeft: user.coins,
+        __cookieState: { user, cycle },
       };
     });
 
@@ -795,6 +899,8 @@ app.post("/api/phase4/start", async (req, res) => {
     }
 
     setUserCookie(res, userId);
+    writeStateCookie(res, userId, result.__cookieState?.user, result.__cookieState?.cycle);
+    delete result.__cookieState;
     res.json(result);
   } catch (err) {
     console.error("Phase4 start error:", err);
@@ -1079,7 +1185,7 @@ app.post("/api/generate", async (req, res) => {
     }
 
     const generationAccess = await withStore((store) => {
-      const user = ensureUser(store, userId);
+      const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
       if (!cycle || cycle.generationIndex >= 3) {
         return {
@@ -1129,6 +1235,7 @@ app.post("/api/generate", async (req, res) => {
         resolvedOutputLanguage,
         generationIndex: cycle.generationIndex,
         postNumber: cycle.postNumber,
+        __cookieState: { user, cycle },
       };
     });
 
@@ -1149,6 +1256,13 @@ app.post("/api/generate", async (req, res) => {
       generationIndex: generationAccess.generationIndex,
     });
 
+    setUserCookie(res, userId);
+    writeStateCookie(
+      res,
+      userId,
+      generationAccess.__cookieState?.user,
+      generationAccess.__cookieState?.cycle
+    );
     res.json({
       ...result,
       cost: generationAccess.cost,
@@ -1172,7 +1286,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
     }
 
     const result = await withStore((store) => {
-      const user = ensureUser(store, userId);
+      const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
       if (!cycle) {
         return {
@@ -1225,6 +1339,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
         coinsLeft: user.coins,
         cost,
         daySlotUsed,
+        __cookieState: { user, cycle },
       };
     });
 
@@ -1232,6 +1347,9 @@ app.post("/api/phase4/confirm", async (req, res) => {
       return res.status(result.statusCode || 400).json(result);
     }
 
+    setUserCookie(res, userId);
+    writeStateCookie(res, userId, result.__cookieState?.user, result.__cookieState?.cycle);
+    delete result.__cookieState;
     res.json(result);
   } catch (err) {
     console.error("Phase4 confirm error:", err);
