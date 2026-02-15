@@ -12,9 +12,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openaiClient = null;
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is missing");
+  }
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey });
+  }
+  return openaiClient;
+}
 
 export async function generatePost({
   kladblok,
@@ -26,6 +35,8 @@ export async function generatePost({
   postNumber,
   generationIndex,
 }) {
+  const client = getOpenAIClient();
+
   const variantGuide = generationIndex === 1
     ? "Variant 1: helder, direct en compact."
     : generationIndex === 2
