@@ -26,15 +26,19 @@ export async function apiFetch(path, init) {
   const relativePath = String(path || "");
   const primaryUrl = apiUrl(relativePath);
   const usesExternalBase = primaryUrl !== relativePath;
+  const requestInit = {
+    ...(init || {}),
+    credentials: "include",
+  };
 
   try {
-    const response = await fetch(primaryUrl, init);
+    const response = await fetch(primaryUrl, requestInit);
     if (usesExternalBase && shouldRetryWithRelative(response)) {
-      return fetch(relativePath, init);
+      return fetch(relativePath, requestInit);
     }
     return response;
   } catch (error) {
     if (!usesExternalBase) throw error;
-    return fetch(relativePath, init);
+    return fetch(relativePath, requestInit);
   }
 }
