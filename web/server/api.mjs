@@ -4,7 +4,6 @@ import { fileURLToPath } from "url";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import express from "express";
-import bodyParser from "body-parser";
 import { generatePost } from "./generatePost.js";
 import {
   isSupportedOutputLanguage,
@@ -32,7 +31,6 @@ const app = express();
 const PORT = 3001;
 const STORE_PATH = path.join(__dirname, "coinStore.json");
 let storeLock = Promise.resolve();
-const cycles = new Map();
 const FALLBACK_STORE_KEY = "__post_this_coin_store";
 const KV_REST_API_URL = process.env.KV_REST_API_URL;
 const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN;
@@ -43,12 +41,7 @@ const COIN_BUNDLES = {
   "100": { coins: 100, amount: "40.00" },
 };
 
-function isCoinsSimulationEnabled() {
-  const raw = String(process.env.COINS_SIMULATION ?? "true").toLowerCase();
-  return !["0", "false", "off", "no"].includes(raw);
-}
-
-app.use(bodyParser.json());
+app.use(express.json());
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -81,6 +74,7 @@ function normalizeStoreShape(parsed) {
   const store = parsed && typeof parsed === "object" ? parsed : {};
   if (!store.users || typeof store.users !== "object") store.users = {};
   if (!store.payments || typeof store.payments !== "object") store.payments = {};
+  if (!store.cycles || typeof store.cycles !== "object") store.cycles = {};
   return store;
 }
 
@@ -180,12 +174,14 @@ async function saveStore(store) {
 }
 
 function withStore(handler) {
-  storeLock = storeLock.then(async () => {
-    const store = await loadStore();
-    const result = await handler(store);
-    await saveStore(store);
-    return result;
-  });
+  storeLock = storeLock
+    .catch(() => undefined)
+    .then(async () => {
+      const store = normalizeStoreShape(await loadStore());
+      const result = await handler(store);
+      await saveStore(store);
+      return result;
+    });
   return storeLock;
 }
 
@@ -223,11 +219,127 @@ function ensureUser(store, userId, preferredLanguage) {
   if (user.day !== today) {
     user.day = today;
     user.postCountToday = 0;
+    if (store.cycles && typeof store.cycles === "object") {
+      delete store.cycles[userId];
+    }
   }
   if (typeof user.postCountToday !== "number") {
     user.postCountToday = 0;
   }
   return user;
+}
+
+function getCycle(store, userId) {
+  if (!store.cycles || typeof store.cycles !== "object") return null;
+  const cycle = store.cycles[userId];
+  if (!cycle || typeof cycle !== "object") return null;
+  if (cycle.day !== todayKey()) {
+    delete store.cycles[userId];
+    return null;
+  }
+  return cycle;
+}
+
+async function reconcilePendingPaymentsForUser(store, userId) {
+  if (!process.env.MOLLIE_API_KEY) return;
+  if (!store.payments || typeof store.payments !== "object") return;
+
+  const pendingEntries = Object.entries(store.payments)
+    .filter(([paymentId, entry]) => {
+      if (!paymentId || !entry || typeof entry !== "object") return false;
+      return entry.userId === userId && !entry.credited;
+    })
+    .slice(-10);
+
+  for (const [paymentId, entry] of pendingEntries) {
+    try {
+      const paymentRes = await fetch(
+        `https://api.mollie.com/v2/payments/${paymentId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.MOLLIE_API_KEY}`,
+          },
+        }
+      );
+      if (!paymentRes.ok) continue;
+
+      const payment = await paymentRes.json();
+      entry.status = payment?.status || entry.status;
+
+      const creditedCoins = Number(entry.coins ?? payment?.metadata?.coins ?? 0) || 0;
+      entry.coins = creditedCoins;
+
+      if (payment?.status === "paid" && !entry.credited && creditedCoins > 0) {
+        const user = ensureUser(store, userId);
+        user.coins = (Number(user.coins) || 0) + creditedCoins;
+        entry.credited = true;
+      }
+    } catch (error) {
+      console.error("Phase4 reconcile payment error:", error);
+    }
+  }
+}
+
+function normalizePaymentId(value) {
+  const raw = String(value || "").trim();
+  return /^tr_[A-Za-z0-9]+$/.test(raw) ? raw : "";
+}
+
+async function reconcilePaymentByIdForUser(store, userId, paymentIdRaw) {
+  const paymentId = normalizePaymentId(paymentIdRaw);
+  if (!paymentId || !process.env.MOLLIE_API_KEY) {
+    return false;
+  }
+
+  try {
+    const paymentRes = await fetch(
+      `https://api.mollie.com/v2/payments/${paymentId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MOLLIE_API_KEY}`,
+        },
+      }
+    );
+
+    if (!paymentRes.ok) {
+      return false;
+    }
+
+    const payment = await paymentRes.json();
+    const metadataUserId = String(payment?.metadata?.userId || "");
+    const resolvedUserId = metadataUserId || userId;
+    if (resolvedUserId !== userId) {
+      return false;
+    }
+
+    const paidCoins = Number(payment?.metadata?.coins) || 0;
+
+    if (!store.payments[paymentId]) {
+      store.payments[paymentId] = {
+        userId: resolvedUserId,
+        coins: paidCoins,
+        status: payment?.status || "unknown",
+        credited: false,
+      };
+    }
+
+    const entry = store.payments[paymentId];
+    entry.userId = entry.userId || resolvedUserId;
+    entry.coins = Number(entry.coins ?? paidCoins) || paidCoins;
+    entry.status = payment?.status || entry.status;
+
+    if (payment?.status === "paid" && !entry.credited) {
+      const user = ensureUser(store, userId);
+      user.coins = (Number(user.coins) || 0) + (Number(entry.coins) || 0);
+      entry.credited = true;
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error("Phase4 reconcile by payment id error:", error);
+    return false;
+  }
 }
 
 app.post("/api/profile/bootstrap", async (req, res) => {
@@ -442,6 +554,16 @@ function getUserIdFromRequest(req) {
   return null;
 }
 
+function resolveUserId(req, fallbackUserId) {
+  if (fallbackUserId && typeof fallbackUserId === "string") {
+    const normalizedFallback = fallbackUserId.trim();
+    if (normalizedFallback) return normalizedFallback;
+  }
+  const cookieUserId = getUserIdFromRequest(req);
+  if (cookieUserId) return cookieUserId;
+  return "";
+}
+
 function setUserCookie(res, userId) {
   res.setHeader(
     "Set-Cookie",
@@ -449,15 +571,65 @@ function setUserCookie(res, userId) {
   );
 }
 
-function getOrigin(req) {
-  return req.headers.origin || process.env.APP_ORIGIN || "http://localhost:5173";
+function normalizeHttpUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return "";
+    }
+    url.hash = "";
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
 }
 
-function buildRedirectUrl(baseUrl, returnTo) {
-  if (!returnTo) return baseUrl;
+function getRequestOrigin(req) {
+  const appOrigin = normalizeHttpUrl(process.env.APP_ORIGIN);
+  if (appOrigin) return appOrigin;
+
+  const forwardedHost = String(
+    req.headers["x-forwarded-host"] || req.headers.host || ""
+  )
+    .split(",")[0]
+    .trim();
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "https")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+
+  if (forwardedHost) {
+    const proto = forwardedProto === "http" || forwardedProto === "https"
+      ? forwardedProto
+      : "https";
+    return `${proto}://${forwardedHost}`;
+  }
+
+  const originHeader = normalizeHttpUrl(req.headers.origin);
+  if (originHeader) return originHeader;
+
+  return "http://localhost:5173";
+}
+
+function getConfiguredPublicUrl(envValue, fallbackUrl) {
+  const normalized = normalizeHttpUrl(envValue);
+  if (normalized && !/^https?:\/\/localhost(?::\d+)?$/i.test(normalized)) {
+    return normalized;
+  }
+  return fallbackUrl;
+}
+
+function buildRedirectUrl(baseUrl, returnTo, userId) {
   try {
     const url = new URL(baseUrl);
-    url.searchParams.set("return", returnTo);
+    if (returnTo) {
+      url.searchParams.set("return", returnTo);
+    }
+    if (userId) {
+      url.searchParams.set("uid", userId);
+    }
     return url.toString();
   } catch {
     return baseUrl;
@@ -547,12 +719,20 @@ app.post("/api/check-kladblok", async (req, res) => {
 
 app.post("/api/phase4/status", async (req, res) => {
   try {
-    const { userId } = req.body || {};
+    const payload = req.body || {};
+    const userId = resolveUserId(req, payload.userId);
+    const paymentId = payload.paymentId;
     if (!userId) {
       return res.status(400).json({ error: "Missing userId" });
     }
 
-    const status = await withStore((store) => {
+    const status = await withStore(async (store) => {
+      const paymentReconciled = await reconcilePaymentByIdForUser(
+        store,
+        userId,
+        paymentId
+      );
+      await reconcilePendingPaymentsForUser(store, userId);
       const user = ensureUser(store, userId);
       const postNumNext = user.postCountToday + 1;
       const daySlotUsed = isDaySlotUsed(user);
@@ -563,6 +743,7 @@ app.post("/api/phase4/status", async (req, res) => {
         daySlotUsed,
         costToStart,
         extraGenerationCost: 1,
+        paymentReconciled,
       };
     });
 
@@ -576,7 +757,8 @@ app.post("/api/phase4/status", async (req, res) => {
 
 app.post("/api/phase4/start", async (req, res) => {
   try {
-    const { userId } = req.body || {};
+    const payload = req.body || {};
+    const userId = resolveUserId(req, payload.userId);
     if (!userId) {
       return res.status(400).json({ error: "Missing userId" });
     }
@@ -597,7 +779,7 @@ app.post("/api/phase4/start", async (req, res) => {
       }
 
       const postNumber = user.postCountToday + 1;
-      cycles.set(userId, createCycle(userId, postNumber));
+      store.cycles[userId] = createCycle(userId, postNumber);
 
       return {
         ok: true,
@@ -623,7 +805,7 @@ app.post("/api/phase4/start", async (req, res) => {
 app.post("/api/phase4/option", async (req, res) => {
   try {
     const payload = req.body || {};
-    const userId = payload.userId;
+    const userId = resolveUserId(req, payload.userId);
     const optionKey = payload.optionKey;
     const post = payload.post;
     const tone = payload.tone;
@@ -639,21 +821,6 @@ app.post("/api/phase4/option", async (req, res) => {
     const cost = costForOption(optionKey);
     if (cost === null) {
       return res.status(400).json({ error: "Unknown option" });
-    }
-
-    const cycle = cycles.get(userId);
-    if (!cycle || !cycle.confirmed) {
-      return res.status(400).json({ error: "No confirmed post" });
-    }
-
-    if (typeof cycle.optionVariantCount !== "number") {
-      cycle.optionVariantCount = 0;
-    }
-
-    if (optionKey === "tone" || optionKey === "rephrase" || optionKey === "language") {
-      if (cycle.optionVariantCount >= 3) {
-        return res.status(400).json({ error: "Variant limit reached" });
-      }
     }
 
     if (!post || typeof post !== "string") {
@@ -673,8 +840,30 @@ app.post("/api/phase4/option", async (req, res) => {
 
     const result = await withStore((store) => {
       const user = ensureUser(store, userId);
+      const cycle = getCycle(store, userId);
+      if (!cycle || !cycle.confirmed) {
+        return {
+          ok: false,
+          error: "No confirmed post",
+        };
+      }
+
+      if (typeof cycle.optionVariantCount !== "number") {
+        cycle.optionVariantCount = 0;
+      }
+
+      if (optionKey === "tone" || optionKey === "rephrase" || optionKey === "language") {
+        if (cycle.optionVariantCount >= 3) {
+          return {
+            ok: false,
+            error: "Variant limit reached",
+          };
+        }
+      }
+
       if (user.coins < cost) {
         return {
+          ok: false,
           error: "Insufficient coins",
           coins: user.coins,
           cost,
@@ -698,14 +887,20 @@ app.post("/api/phase4/option", async (req, res) => {
 
     if (optionKey === "tone") {
       const rewritten = await rewritePost({ post, tone, mode: "tone" });
-      cycle.optionVariantCount += 1;
+      await withStore((store) => {
+        const cycle = getCycle(store, userId);
+        if (cycle) cycle.optionVariantCount = (cycle.optionVariantCount || 0) + 1;
+      });
       setUserCookie(res, userId);
       return res.json({ ...result, post: rewritten });
     }
 
     if (optionKey === "rephrase") {
       const rewritten = await rewritePost({ post, mode: "rephrase" });
-      cycle.optionVariantCount += 1;
+      await withStore((store) => {
+        const cycle = getCycle(store, userId);
+        if (cycle) cycle.optionVariantCount = (cycle.optionVariantCount || 0) + 1;
+      });
       setUserCookie(res, userId);
       return res.json({ ...result, post: rewritten });
     }
@@ -716,7 +911,10 @@ app.post("/api/phase4/option", async (req, res) => {
         mode: "language",
         targetLanguage: normalizeOutputLanguage(targetLanguageRaw, "en"),
       });
-      cycle.optionVariantCount += 1;
+      await withStore((store) => {
+        const cycle = getCycle(store, userId);
+        if (cycle) cycle.optionVariantCount = (cycle.optionVariantCount || 0) + 1;
+      });
       setUserCookie(res, userId);
       return res.json({ ...result, post: rewritten });
     }
@@ -738,7 +936,9 @@ app.post("/api/phase4/option", async (req, res) => {
 
 app.post("/api/phase4/checkout", async (req, res) => {
   try {
-    const { userId, bundle, returnTo } = req.body || {};
+    const payload = req.body || {};
+    const userId = resolveUserId(req, payload.userId);
+    const { bundle, returnTo } = payload;
     if (!userId) {
       return res.status(400).json({ error: "Missing userId" });
     }
@@ -747,32 +947,23 @@ app.post("/api/phase4/checkout", async (req, res) => {
       return res.status(400).json({ error: "Unknown bundle" });
     }
 
-    const origin = getOrigin(req);
-    const baseRedirectUrl = process.env.MOLLIE_REDIRECT_URL || origin;
+    const requestOrigin = getRequestOrigin(req);
+    const baseRedirectUrl = getConfiguredPublicUrl(
+      process.env.MOLLIE_REDIRECT_URL,
+      requestOrigin
+    );
     const allowedReturnTo = new Set(["coins", "packages"]);
     const safeReturnTo = allowedReturnTo.has(returnTo) ? returnTo : "";
-    const redirectUrl = buildRedirectUrl(baseRedirectUrl, safeReturnTo);
-
-    if (!process.env.MOLLIE_API_KEY && isCoinsSimulationEnabled()) {
-      await withStore((store) => {
-        const user = ensureUser(store, userId);
-        user.coins += selected.coins;
-      });
-
-      setUserCookie(res, userId);
-      return res.json({
-        checkoutUrl: redirectUrl,
-        simulated: true,
-        credited: selected.coins,
-      });
-    }
+    const redirectUrl = buildRedirectUrl(baseRedirectUrl, safeReturnTo, userId);
 
     if (!process.env.MOLLIE_API_KEY) {
       return res.status(500).json({ error: "Missing Mollie API key" });
     }
 
-    const webhookUrl =
-      process.env.MOLLIE_WEBHOOK_URL || `${origin}/api/phase4/webhook`;
+    const webhookUrl = getConfiguredPublicUrl(
+      process.env.MOLLIE_WEBHOOK_URL,
+      `${requestOrigin}/api/phase4/webhook`
+    );
 
     const paymentRes = await fetch("https://api.mollie.com/v2/payments", {
       method: "POST",
@@ -799,7 +990,7 @@ app.post("/api/phase4/checkout", async (req, res) => {
     await withStore((store) => {
       store.payments[payment.id] = {
         userId,
-        coins: selected.coins,
+        coins: Number(selected.coins) || 0,
         status: payment.status,
         credited: false,
       };
@@ -814,50 +1005,12 @@ app.post("/api/phase4/checkout", async (req, res) => {
 });
 
 app.post("/api/phase4/admin/grant-coins", async (req, res) => {
-  try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (!adminSecret) {
-      return res.status(500).json({ error: "Admin secret not configured" });
-    }
-
-    const providedSecret =
-      req.headers["x-admin-secret"] || req.body?.adminSecret;
-
-    if (providedSecret !== adminSecret) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
-    const { userId, coins } = req.body || {};
-    const coinsToGrant = Number(coins);
-
-    if (!userId || typeof userId !== "string") {
-      return res.status(400).json({ error: "Missing userId" });
-    }
-    if (!Number.isFinite(coinsToGrant) || coinsToGrant <= 0) {
-      return res.status(400).json({ error: "Invalid coins" });
-    }
-
-    const result = await withStore((store) => {
-      const user = ensureUser(store, userId);
-      user.coins += Math.floor(coinsToGrant);
-      return {
-        ok: true,
-        userId,
-        granted: Math.floor(coinsToGrant),
-        coins: user.coins,
-      };
-    });
-
-    return res.json(result);
-  } catch (err) {
-    console.error("Admin grant coins error:", err);
-    return res.status(500).json({ error: "Grant failed" });
-  }
+  return res.status(403).json({ error: "Disabled: coins only via Mollie" });
 });
 
 app.post(
   "/api/phase4/webhook",
-  bodyParser.urlencoded({ extended: false }),
+  express.urlencoded({ extended: false }),
   async (req, res) => {
     try {
       const paymentId = req.body?.id || req.query?.id;
@@ -879,7 +1032,7 @@ app.post(
         if (!store.payments[paymentId]) {
           store.payments[paymentId] = {
             userId: payment?.metadata?.userId || "",
-            coins: payment?.metadata?.coins || 0,
+            coins: Number(payment?.metadata?.coins) || 0,
             status: payment?.status || "unknown",
             credited: false,
           };
@@ -890,7 +1043,9 @@ app.post(
 
         if (payment?.status === "paid" && !entry.credited) {
           const user = ensureUser(store, entry.userId);
-          user.coins += entry.coins;
+          const coins = Number(entry.coins) || 0;
+          entry.coins = coins;
+          user.coins = (Number(user.coins) || 0) + coins;
           entry.credited = true;
         }
       });
@@ -918,22 +1073,30 @@ app.post("/api/generate", async (req, res) => {
     const outputLanguageRaw =
       payload.outputLanguage ?? payload.language ?? payload.targetLanguage;
 
-    const userId = getUserIdFromRequest(req) || payload.userId;
+    const userId = resolveUserId(req, payload.userId);
     if (!userId) {
       return res.status(403).json({ error: "Cycle not started" });
     }
 
-    const cycle = cycles.get(userId);
-    if (!cycle || cycle.generationIndex >= 3) {
-      return res.status(403).json({ error: "Cycle not started" });
-    }
-
-    if (cycle.confirmed) {
-      return res.status(403).json({ error: "Post already confirmed" });
-    }
-
     const generationAccess = await withStore((store) => {
       const user = ensureUser(store, userId);
+      const cycle = getCycle(store, userId);
+      if (!cycle || cycle.generationIndex >= 3) {
+        return {
+          ok: false,
+          statusCode: 403,
+          error: "Cycle not started",
+        };
+      }
+
+      if (cycle.confirmed) {
+        return {
+          ok: false,
+          statusCode: 403,
+          error: "Post already confirmed",
+        };
+      }
+
       const primaryLanguage = normalizeOutputLanguage(user.primary_language, "en");
       const requestedLanguage = normalizeOutputLanguage(outputLanguageRaw, primaryLanguage);
       const resolvedOutputLanguage =
@@ -955,21 +1118,25 @@ app.post("/api/generate", async (req, res) => {
         user.coins -= languageCost;
       }
 
+      cycle.generationIndex += 1;
+      cycle.variantCount += 1;
+
       return {
         ok: true,
         cost: languageCost,
         coinsLeft: user.coins,
         primaryLanguage,
         resolvedOutputLanguage,
+        generationIndex: cycle.generationIndex,
+        postNumber: cycle.postNumber,
       };
     });
 
     if (!generationAccess.ok) {
-      return res.status(400).json(generationAccess);
+      return res
+        .status(generationAccess.statusCode || 400)
+        .json(generationAccess);
     }
-
-    cycle.generationIndex += 1;
-    cycle.variantCount += 1;
 
     const result = await generatePost({
       kladblok,
@@ -978,8 +1145,8 @@ app.post("/api/generate", async (req, res) => {
       context,
       keywords,
       outputLanguage: generationAccess.resolvedOutputLanguage,
-      postNumber: cycle.postNumber,
-      generationIndex: cycle.generationIndex,
+      postNumber: generationAccess.postNumber,
+      generationIndex: generationAccess.generationIndex,
     });
 
     res.json({
@@ -997,28 +1164,38 @@ app.post("/api/generate", async (req, res) => {
 
 app.post("/api/phase4/confirm", async (req, res) => {
   try {
-    const { userId, isOfficial } = req.body || {};
+    const payload = req.body || {};
+    const userId = resolveUserId(req, payload.userId);
+    const { isOfficial } = payload;
     if (!userId) {
       return res.status(400).json({ error: "Missing userId" });
     }
 
-    const cycle = cycles.get(userId);
-    if (!cycle) {
-      return res.status(400).json({ error: "No active cycle" });
-    }
-
-    if (cycle.confirmed) {
-      return res.json({ ok: true, alreadyConfirmed: true });
-    }
-
     const result = await withStore((store) => {
       const user = ensureUser(store, userId);
+      const cycle = getCycle(store, userId);
+      if (!cycle) {
+        return {
+          ok: false,
+          statusCode: 400,
+          error: "No active cycle",
+        };
+      }
+
+      if (cycle.confirmed) {
+        return {
+          ok: true,
+          alreadyConfirmed: true,
+        };
+      }
+
       const daySlotUsed = isDaySlotUsed(user);
       const cost = daySlotUsed ? 1 : (isOfficial ? 0 : 1);
 
       if (cost > 0 && user.coins < cost) {
         return {
           ok: false,
+          statusCode: 400,
           error: "Insufficient coins",
           coins: user.coins,
           cost,
@@ -1039,6 +1216,9 @@ app.post("/api/phase4/confirm", async (req, res) => {
         user.postCountToday += 1;
       }
 
+      cycle.confirmed = true;
+      cycle.confirmedAt = Date.now();
+
       return {
         ok: true,
         postCountToday: user.postCountToday,
@@ -1049,11 +1229,8 @@ app.post("/api/phase4/confirm", async (req, res) => {
     });
 
     if (!result.ok) {
-      return res.status(400).json(result);
+      return res.status(result.statusCode || 400).json(result);
     }
-
-    cycle.confirmed = true;
-    cycle.confirmedAt = Date.now();
 
     res.json(result);
   } catch (err) {
@@ -1064,13 +1241,19 @@ app.post("/api/phase4/confirm", async (req, res) => {
 
 app.post("/api/phase4/download-variant", async (req, res) => {
   try {
-    const { userId, isOfficial } = req.body || {};
+    const payload = req.body || {};
+    const userId = resolveUserId(req, payload.userId);
+    const { isOfficial } = payload;
     if (!userId) {
       return res.status(400).json({ error: "Missing userId" });
     }
 
-    const cycle = cycles.get(userId);
-    if (!cycle || !cycle.confirmed) {
+    const cycleCheck = await withStore((store) => {
+      ensureUser(store, userId);
+      const cycle = getCycle(store, userId);
+      return Boolean(cycle && cycle.confirmed);
+    });
+    if (!cycleCheck) {
       return res.status(400).json({ error: "No confirmed post" });
     }
 
