@@ -15,6 +15,17 @@ export function apiUrl(path) {
     return normalizedPath;
   }
 
+  if (typeof window !== "undefined") {
+    try {
+      const baseOrigin = new URL(base, window.location.origin).origin;
+      if (baseOrigin !== window.location.origin) {
+        return normalizedPath;
+      }
+    } catch {
+      return normalizedPath;
+    }
+  }
+
   return `${base}${normalizedPath}`;
 }
 

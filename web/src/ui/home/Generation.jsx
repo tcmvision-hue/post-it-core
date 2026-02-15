@@ -18,7 +18,6 @@ export default function Generation({
   onReview,
 }) {
   const { t } = useI18n();
-  const MAX_GENERATIONS = 3;
   const [loading, setLoading] = useState(false);
   const [keywords, setKeywords] = useState("");
   const [error, setError] = useState("");
@@ -27,7 +26,6 @@ export default function Generation({
   const currentPost = generations[generationCount - 1] ?? null;
   const currentText = currentPost?.text || "";
   const currentLabel = currentPost?.label || "";
-  const isLast = generationCount >= MAX_GENERATIONS;
 
   // Auto-start eerste generatie
   useEffect(() => {
@@ -36,7 +34,7 @@ export default function Generation({
   }, []);
 
   async function runGeneration() {
-    if (loading || isLast) return;
+    if (loading) return;
     setLoading(true);
     setError("");
 
@@ -90,7 +88,7 @@ export default function Generation({
           <h2 style={{ marginTop: 0, marginBottom: 8 }}>
             {t("generation.title", {
               current: Math.max(1, generationCount),
-              max: MAX_GENERATIONS,
+              max: "∞",
             })}
           </h2>
 
@@ -130,7 +128,7 @@ export default function Generation({
           {loading && currentPost && <p style={{ marginTop: 10 }}>{t("generation.loading")}</p>}
 
           <div style={styles.actions}>
-            {currentPost && !isLast && (
+            {currentPost && (
               <button style={styles.button(loading)} onClick={runGeneration} disabled={loading}>
                 {t("generation.regenerate")}
               </button>
@@ -146,7 +144,7 @@ export default function Generation({
               </button>
             )}
 
-            {currentPost && isLast && (
+            {currentPost && generationCount > 1 && (
               <button style={styles.button(loading)} onClick={onReview} disabled={loading}>
                 {t("generation.select")}
               </button>

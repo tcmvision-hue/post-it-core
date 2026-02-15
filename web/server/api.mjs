@@ -41,15 +41,11 @@ const COIN_BUNDLES = {
   "100": { coins: 100, amount: "40.00" },
 };
 
-function isCoinsSimulationEnabled() {
-  const raw = String(process.env.COINS_SIMULATION ?? "false").toLowerCase();
-  return !["0", "false", "off", "no"].includes(raw);
+function areCoinBlocksDisabled() {
+  return false;
 }
 
-function areCoinBlocksDisabled() {
-  const raw = String(process.env.COIN_BLOCKS_DISABLED ?? "true").toLowerCase();
-  return !["0", "false", "off", "no"].includes(raw);
-}
+const MS_24H = 24 * 60 * 60 * 1000;
 
 app.use(express.json());
 
@@ -206,6 +202,7 @@ function ensureUser(store, userId, preferredLanguage) {
       primary_language: initialPrimaryLanguage,
       coins: 0,
       last_free_post_date: null,
+      last_free_post_timestamp: null,
       created_at: new Date().toISOString(),
       day: todayKey(),
       postCountToday: 0,
@@ -216,6 +213,12 @@ function ensureUser(store, userId, preferredLanguage) {
   if (!user.profile_id) user.profile_id = userId;
   if (!user.created_at) user.created_at = new Date().toISOString();
   if (!user.last_free_post_date) user.last_free_post_date = null;
+  if (typeof user.last_free_post_timestamp === "undefined") {
+    const migrated = Date.parse(String(user.last_free_post_date || ""));
+    user.last_free_post_timestamp = Number.isFinite(migrated)
+      ? new Date(migrated).toISOString()
+      : null;
+  }
 
   if (!user.primary_language) {
     user.primary_language = initialPrimaryLanguage;
@@ -443,7 +446,9 @@ app.post("/api/profile/primary-language", async (req, res) => {
 });
 
 function isDaySlotUsed(user) {
-  return user.postCountToday > 0;
+  const lastFreeTs = Date.parse(String(user?.last_free_post_timestamp || ""));
+  if (!Number.isFinite(lastFreeTs)) return false;
+  return Date.now() - lastFreeTs < MS_24H;
 }
 
 function costForOption(optionKey) {
@@ -451,7 +456,7 @@ function costForOption(optionKey) {
   if (optionKey === "hashtags") return 1;
   if (optionKey === "rephrase") return 1;
   if (optionKey === "language") return 3;
-  if (optionKey === "download") return 2;
+  if (optionKey === "download") return 1;
   return null;
 }
 
@@ -465,6 +470,7 @@ function createCycle(userId, postNumber) {
     generationIndex: 0,
     variantCount: 0,
     optionVariantCount: 0,
+    generatedPosts: [],
     day: todayKey(),
     startedAt: Date.now(),
     confirmed: false,
@@ -968,15 +974,6 @@ app.post("/api/phase4/option", async (req, res) => {
         cycle.optionVariantCount = 0;
       }
 
-      if (optionKey === "tone" || optionKey === "rephrase" || optionKey === "language") {
-        if (cycle.optionVariantCount >= 3) {
-          return {
-            ok: false,
-            error: "Variant limit reached",
-          };
-        }
-      }
-
       const effectiveCost = areCoinBlocksDisabled() ? 0 : cost;
       if (user.coins < effectiveCost) {
         return {
@@ -1073,21 +1070,6 @@ app.post("/api/phase4/checkout", async (req, res) => {
     const safeReturnTo = allowedReturnTo.has(returnTo) ? returnTo : "";
     const redirectUrl = buildRedirectUrl(baseRedirectUrl, safeReturnTo, userId);
 
-    if (!process.env.MOLLIE_API_KEY && isCoinsSimulationEnabled()) {
-      const credited = Number(selected.coins) || 0;
-      await withStore((store) => {
-        const user = ensureUser(store, userId);
-        user.coins = (Number(user.coins) || 0) + credited;
-      });
-
-      setUserCookie(res, userId);
-      return res.json({
-        checkoutUrl: redirectUrl,
-        simulated: true,
-        credited,
-      });
-    }
-
     if (!process.env.MOLLIE_API_KEY) {
       return res.status(500).json({ error: "Missing Mollie API key" });
     }
@@ -1137,7 +1119,40 @@ app.post("/api/phase4/checkout", async (req, res) => {
 });
 
 app.post("/api/phase4/admin/grant-coins", async (req, res) => {
-  return res.status(403).json({ error: "Disabled" });
+  try {
+    const adminSecret = String(process.env.ADMIN_SECRET || "").trim();
+    const providedSecret = String(req.headers["x-admin-secret"] || "").trim();
+    if (!adminSecret || providedSecret !== adminSecret) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const payload = req.body || {};
+    const userId = String(payload.userId || "").trim();
+    const amount = Number(payload.amount);
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: "Invalid amount" });
+    }
+
+    const result = await withStore((store) => {
+      const user = ensureUser(store, userId);
+      user.coins = (Number(user.coins) || 0) + Math.floor(amount);
+      return {
+        ok: true,
+        userId,
+        granted: Math.floor(amount),
+        coinsLeft: user.coins,
+      };
+    });
+
+    setUserCookie(res, userId);
+    return res.json(result);
+  } catch (err) {
+    console.error("Phase4 admin grant-coins error:", err);
+    return res.status(500).json({ error: "Grant failed" });
+  }
 });
 
 app.post(
@@ -1213,7 +1228,7 @@ app.post("/api/generate", async (req, res) => {
     const generationAccess = await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
-      if (!cycle || cycle.generationIndex >= 3) {
+      if (!cycle) {
         return {
           ok: false,
           statusCode: 403,
@@ -1234,34 +1249,45 @@ app.post("/api/generate", async (req, res) => {
       const resolvedOutputLanguage =
         requestedLanguage === "auto" ? primaryLanguage : requestedLanguage;
 
-      const languageCost = areCoinBlocksDisabled()
-        ? 0
-        : (resolvedOutputLanguage === primaryLanguage ? 0 : 3);
-      if (languageCost > 0 && user.coins < languageCost) {
+      const generationCost = cycle.generationIndex > 0 ? 1 : 0;
+      const languageCost = resolvedOutputLanguage === primaryLanguage ? 0 : 3;
+      const totalCost = generationCost + languageCost;
+      if (totalCost > 0 && user.coins < totalCost) {
         return {
           ok: false,
           error: "Insufficient coins",
           coins: user.coins,
-          cost: languageCost,
+          cost: totalCost,
           primaryLanguage,
           requestedLanguage: resolvedOutputLanguage,
         };
       }
 
-      if (languageCost > 0) {
-        user.coins -= languageCost;
+      if (totalCost > 0) {
+        user.coins -= totalCost;
       }
+
+      if (!Array.isArray(cycle.generatedPosts)) {
+        cycle.generatedPosts = [];
+      }
+
+      const priorVariants = cycle.generatedPosts
+        .filter((item) => typeof item === "string" && item.trim().length > 0)
+        .slice(-8);
 
       cycle.generationIndex += 1;
       cycle.variantCount += 1;
 
       return {
         ok: true,
-        cost: languageCost,
+        cost: totalCost,
+        generationCost,
+        languageCost,
         coinsLeft: user.coins,
         primaryLanguage,
         resolvedOutputLanguage,
         generationIndex: cycle.generationIndex,
+        priorVariants,
         postNumber: cycle.postNumber,
         __cookieState: { user, cycle },
       };
@@ -1282,7 +1308,17 @@ app.post("/api/generate", async (req, res) => {
       outputLanguage: generationAccess.resolvedOutputLanguage,
       postNumber: generationAccess.postNumber,
       generationIndex: generationAccess.generationIndex,
+      priorVariants: generationAccess.priorVariants,
     });
+
+    if (
+      generationAccess.__cookieState?.cycle &&
+      Array.isArray(generationAccess.__cookieState.cycle.generatedPosts)
+    ) {
+      generationAccess.__cookieState.cycle.generatedPosts.push(result.post);
+      generationAccess.__cookieState.cycle.generatedPosts =
+        generationAccess.__cookieState.cycle.generatedPosts.slice(-8);
+    }
 
     setUserCookie(res, userId);
     writeStateCookie(
@@ -1308,7 +1344,6 @@ app.post("/api/phase4/confirm", async (req, res) => {
   try {
     const payload = req.body || {};
     const userId = resolveUserId(req, payload.userId);
-    const { isOfficial } = payload;
     if (!userId) {
       return res.status(400).json({ error: "Missing userId" });
     }
@@ -1337,7 +1372,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
       }
 
       const daySlotUsed = isDaySlotUsed(user);
-      const cost = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
+      const cost = daySlotUsed ? 1 : 0;
 
       if (cost > 0 && user.coins < cost) {
         return {
@@ -1350,11 +1385,13 @@ app.post("/api/phase4/confirm", async (req, res) => {
         };
       }
 
-      user.coins -= cost;
+      if (cost > 0) {
+        user.coins -= cost;
+      }
 
-      const today = todayKey();
       if (cost === 0) {
-        user.last_free_post_date = today;
+        user.last_free_post_timestamp = new Date().toISOString();
+        user.last_free_post_date = todayKey();
       }
 
       if (user.postCountToday === 0) {
@@ -1408,7 +1445,7 @@ app.post("/api/phase4/download-variant", async (req, res) => {
       return res.status(400).json({ error: "No confirmed post" });
     }
 
-    const cost = areCoinBlocksDisabled() ? 0 : (isOfficial ? 0 : 1);
+    const cost = isOfficial ? 0 : 1;
     if (cost === 0) {
       setUserCookie(res, userId);
       return res.json({ ok: true, cost: 0 });

@@ -1,9 +1,17 @@
 import { defineConfig } from "vite";
 import { resolve } from "path";
 import react from "@vitejs/plugin-react";
+import apiApp from "./server/api.mjs";
+
+const apiMiddlewarePlugin = {
+  name: "post-this-api-middleware",
+  configureServer(server) {
+    server.middlewares.use(apiApp);
+  },
+};
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), apiMiddlewarePlugin],
   build: {
     rollupOptions: {
       input: {
@@ -14,12 +22,5 @@ export default defineConfig({
   },
   server: {
     allowedHosts: true,
-    proxy: {
-      "/api": {
-        target: "http://localhost:3001",
-        changeOrigin: true,
-        secure: false,
-      },
-    },
   },
 });

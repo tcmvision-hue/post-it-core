@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { getUser } from "../../utils/user";
+import {
+  clearPendingPaymentId,
+  getPendingPaymentId,
+  getUser,
+  setPendingPaymentId,
+} from "../../utils/user";
 import { apiFetch } from "../../utils/api";
 import VideoBackground from "../../components/VideoBackground";
 import { VIDEO_BG } from "./VideoBackgrounds";
@@ -24,14 +29,18 @@ export default function CoinsGate({ onStart }) {
     setError("");
     try {
       const user = getUser();
+      const paymentId = getPendingPaymentId();
       const res = await apiFetch("/api/phase4/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ userId: user.id, paymentId }),
       });
       const data = await res.json();
       if (res.ok) {
         setStatus(data);
+        if (data?.paymentReconciled) {
+          clearPendingPaymentId();
+        }
       } else {
         setError(data?.error || t("coins.error.status"));
       }
@@ -100,6 +109,9 @@ export default function CoinsGate({ onStart }) {
       });
       const data = await res.json();
       if (res.ok && data?.checkoutUrl) {
+        if (data?.id) {
+          setPendingPaymentId(data.id);
+        }
         window.location.href = data.checkoutUrl;
       } else {
         setCheckoutError(data?.error || t("coins.error.checkout"));

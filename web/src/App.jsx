@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getUser } from "./utils/user";
+import { getUser, syncPendingPaymentFromUrl, syncUserFromUrl } from "./utils/user";
 import { apiFetch } from "./utils/api";
 import { useI18n } from "./i18n/I18nContext";
 
@@ -172,9 +172,25 @@ export default function App() {
   const [confirmError, setConfirmError] = useState("");
 
   useEffect(() => {
+    syncUserFromUrl();
+    syncPendingPaymentFromUrl();
+
     const params = new URLSearchParams(window.location.search);
-    if (params.has("return")) {
-      window.history.replaceState({}, "", window.location.pathname);
+    if (
+      params.has("return") ||
+      params.has("uid") ||
+      params.has("id") ||
+      params.has("payment_id")
+    ) {
+      params.delete("return");
+      params.delete("uid");
+      params.delete("id");
+      params.delete("payment_id");
+      const nextSearch = params.toString();
+      const nextUrl = nextSearch
+        ? `${window.location.pathname}?${nextSearch}`
+        : window.location.pathname;
+      window.history.replaceState({}, "", nextUrl);
     }
   }, []);
 
@@ -202,6 +218,51 @@ export default function App() {
 
   // ⬇️ Alleen visuele timing
   const [showGeneration, setShowGeneration] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get("return");
+    if (returnTo !== "packages") return;
+
+    try {
+      const raw = window.sessionStorage.getItem("post_it_packages_return_context");
+      if (!raw) {
+        setPhase(PHASES.COINS);
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      const restoredPost = typeof parsed?.post === "string" ? parsed.post.trim() : "";
+      if (!restoredPost) {
+        setPhase(PHASES.COINS);
+        return;
+      }
+
+      const restoredVariant = createVariant(
+        {
+          text: restoredPost,
+          label: "Origineel",
+          accent: "Origineel",
+          kind: "official",
+        },
+        "original"
+      );
+
+      const restoredHashtags = Array.isArray(parsed?.hashtags)
+        ? parsed.hashtags
+          .filter((entry) => typeof entry === "string" && entry.trim())
+          .map((entry) => ({ tag: entry.trim(), selected: true }))
+        : [];
+
+      setVariants([restoredVariant]);
+      setSelectedVariantId(restoredVariant.id);
+      setHashtags(restoredHashtags);
+      setPhase(PHASES.PACKAGES);
+    } catch {
+      setPhase(PHASES.COINS);
+    }
+  }, []);
 
   useEffect(() => {
     const noScrollPhases = [
@@ -401,7 +462,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, isOfficial: isOfficialSelection }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.ok) {
         setConfirmError(data?.error || "Bevestigen mislukt");
         return;
@@ -638,6 +699,13 @@ export default function App() {
         }}
         onFinishSession={() => {
           clearStoredIntake();
+          if (typeof window !== "undefined") {
+            try {
+              window.sessionStorage.removeItem("post_it_packages_return_context");
+            } catch {
+              // ignore storage errors
+            }
+          }
           setCycleMeta(null);
           setVariants([]);
           setSelectedVariantId("");

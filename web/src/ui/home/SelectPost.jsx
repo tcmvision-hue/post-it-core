@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getUser } from "../../utils/user";
+import { clearPendingPaymentId, getPendingPaymentId, getUser } from "../../utils/user";
 import { apiFetch } from "../../utils/api";
 import { primaryHomeButtonStyle } from "./sharedStyles";
 import { useI18n } from "../../i18n/I18nContext";
@@ -7,8 +7,6 @@ import { useI18n } from "../../i18n/I18nContext";
 export default function SelectPost({ posts, onSelect, confirmError, onRegenerate }) {
   const { t } = useI18n();
 
-  const [coins, setCoins] = useState(0);
-  const [daySlotUsed, setDaySlotUsed] = useState(false);
   const [statusError, setStatusError] = useState("");
   const [backgroundImageOk, setBackgroundImageOk] = useState(true);
 
@@ -19,10 +17,11 @@ export default function SelectPost({ posts, onSelect, confirmError, onRegenerate
       setStatusError("");
       try {
         const user = getUser();
+        const paymentId = getPendingPaymentId();
         const res = await apiFetch("/api/phase4/status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id }),
+          body: JSON.stringify({ userId: user.id, paymentId }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -30,8 +29,9 @@ export default function SelectPost({ posts, onSelect, confirmError, onRegenerate
           return;
         }
         if (cancelled) return;
-        setCoins(Number(data?.coins) || 0);
-        setDaySlotUsed(Boolean(data?.daySlotUsed));
+        if (data?.paymentReconciled) {
+          clearPendingPaymentId();
+        }
       } catch {
         if (!cancelled) setStatusError(t("select.error.status"));
       }
@@ -48,19 +48,12 @@ export default function SelectPost({ posts, onSelect, confirmError, onRegenerate
   }
 
   const cardPosts = useMemo(
-    () => (Array.isArray(posts) ? posts : []).slice(0, 3),
+    () => (Array.isArray(posts) ? posts : []),
     [posts]
   );
 
   if (cardPosts.length === 0) {
     return null;
-  }
-
-  function getCardCost(post, index) {
-    if (!daySlotUsed && (post?.kind === "official" || index === 0)) {
-      return 0;
-    }
-    return 1;
   }
 
   return (
@@ -108,15 +101,8 @@ export default function SelectPost({ posts, onSelect, confirmError, onRegenerate
           )}
 
           {cardPosts.map((post, index) => {
-            const cost = getCardCost(post, index);
-            const insufficient = cost > 0 && coins < cost;
-
             return (
               <div key={index} style={styles.card}>
-                {insufficient && (
-                  <p style={styles.lockText}>{t("select.lock")}</p>
-                )}
-
                 <div style={styles.textBox}>
                   <p
                     style={{
@@ -136,12 +122,11 @@ export default function SelectPost({ posts, onSelect, confirmError, onRegenerate
 
                 <button
                   onClick={() => onSelect(post)}
-                  disabled={insufficient}
                   style={{
                     ...primaryHomeButtonStyle,
                     marginTop: 12,
-                    opacity: insufficient ? 0.55 : 1,
-                    cursor: insufficient ? "not-allowed" : "pointer",
+                    opacity: 1,
+                    cursor: "pointer",
                   }}
                 >
                   {t("select.choose")}

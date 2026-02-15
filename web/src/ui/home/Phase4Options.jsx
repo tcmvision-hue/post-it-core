@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { getUser } from "../../utils/user";
+import {
+  clearPendingPaymentId,
+  getPendingPaymentId,
+  getUser,
+  setPendingPaymentId,
+} from "../../utils/user";
 import { apiFetch } from "../../utils/api";
 import VideoBackground from "../../components/VideoBackground";
 import { VIDEO_BG } from "./VideoBackgrounds";
@@ -23,6 +28,26 @@ export default function Phase4Options({
   const [outputLanguage, setOutputLanguage] = useState("en");
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState("");
+
+  function savePackagesReturnContext() {
+    if (typeof window === "undefined") return;
+    if (!post || typeof post !== "string") return;
+    const selectedHashtags = Array.isArray(hashtags)
+      ? hashtags.filter((entry) => entry?.selected && entry?.tag).map((entry) => entry.tag)
+      : [];
+    try {
+      window.sessionStorage.setItem(
+        "post_it_packages_return_context",
+        JSON.stringify({
+          post,
+          hashtags: selectedHashtags,
+          createdAt: Date.now(),
+        })
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }
 
   const outputLanguageOptions = [
     { value: "nl", label: t("generation.lang.nl") },
@@ -49,19 +74,30 @@ export default function Phase4Options({
 
   useEffect(() => {
     loadStatus();
+    const intervalId = setInterval(() => {
+      loadStatus();
+    }, 4000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
   }, []);
 
   async function loadStatus() {
     try {
       const user = getUser();
+      const paymentId = getPendingPaymentId();
       const res = await apiFetch("/api/phase4/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ userId: user.id, paymentId }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setCoins(data?.coins ?? 0);
+        if (data?.paymentReconciled) {
+          clearPendingPaymentId();
+        }
       }
     } catch {
       // ignore status errors here
@@ -100,7 +136,7 @@ export default function Phase4Options({
           targetLanguage: optionKey === "language" ? outputLanguage : undefined,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data?.ok) {
         const reason = t(formatReason(data.debitedFor));
         const cost = data.cost ?? 0;
@@ -129,10 +165,10 @@ export default function Phase4Options({
           );
         }
       } else {
-        if (data?.error === "Variant limit reached") {
-          setError(t("phase4.error.limit"));
-        } else if (data?.error === "Insufficient coins") {
+        if (data?.error === "Insufficient coins") {
           setError(t("coins.note.lock"));
+        } else if (data?.error === "No confirmed post") {
+          setError(t("phase4.error.missingPost"));
         } else {
           setError(data?.error || t("phase4.error.action"));
         }
@@ -158,8 +194,12 @@ export default function Phase4Options({
           returnTo: "packages",
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data?.checkoutUrl) {
+        if (data?.id) {
+          setPendingPaymentId(data.id);
+        }
+        savePackagesReturnContext();
         window.location.href = data.checkoutUrl;
       } else {
         setCheckoutError(data?.error || t("coins.error.checkout"));
