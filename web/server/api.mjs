@@ -41,6 +41,11 @@ const COIN_BUNDLES = {
   "100": { coins: 100, amount: "40.00" },
 };
 
+function isCoinsSimulationEnabled() {
+  const raw = String(process.env.COINS_SIMULATION ?? "true").toLowerCase();
+  return !["0", "false", "off", "no"].includes(raw);
+}
+
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -1062,6 +1067,21 @@ app.post("/api/phase4/checkout", async (req, res) => {
     const safeReturnTo = allowedReturnTo.has(returnTo) ? returnTo : "";
     const redirectUrl = buildRedirectUrl(baseRedirectUrl, safeReturnTo, userId);
 
+    if (!process.env.MOLLIE_API_KEY && isCoinsSimulationEnabled()) {
+      const credited = Number(selected.coins) || 0;
+      await withStore((store) => {
+        const user = ensureUser(store, userId);
+        user.coins = (Number(user.coins) || 0) + credited;
+      });
+
+      setUserCookie(res, userId);
+      return res.json({
+        checkoutUrl: redirectUrl,
+        simulated: true,
+        credited,
+      });
+    }
+
     if (!process.env.MOLLIE_API_KEY) {
       return res.status(500).json({ error: "Missing Mollie API key" });
     }
@@ -1111,7 +1131,46 @@ app.post("/api/phase4/checkout", async (req, res) => {
 });
 
 app.post("/api/phase4/admin/grant-coins", async (req, res) => {
-  return res.status(403).json({ error: "Disabled: coins only via Mollie" });
+  try {
+    const adminSecret = process.env.ADMIN_SECRET;
+    if (!adminSecret) {
+      return res.status(500).json({ error: "Admin secret not configured" });
+    }
+
+    const providedSecret =
+      req.headers["x-admin-secret"] || req.body?.adminSecret;
+
+    if (providedSecret !== adminSecret) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { userId, coins } = req.body || {};
+    const coinsToGrant = Number(coins);
+
+    if (!userId || typeof userId !== "string") {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+    if (!Number.isFinite(coinsToGrant) || coinsToGrant <= 0) {
+      return res.status(400).json({ error: "Invalid coins" });
+    }
+
+    const result = await withStore((store) => {
+      const user = ensureUser(store, userId);
+      user.coins = (Number(user.coins) || 0) + Math.floor(coinsToGrant);
+      return {
+        ok: true,
+        userId,
+        granted: Math.floor(coinsToGrant),
+        coins: user.coins,
+      };
+    });
+
+    setUserCookie(res, userId);
+    return res.json(result);
+  } catch (err) {
+    console.error("Admin grant coins error:", err);
+    return res.status(500).json({ error: "Grant failed" });
+  }
 });
 
 app.post(
