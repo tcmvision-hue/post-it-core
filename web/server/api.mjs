@@ -1287,7 +1287,12 @@ app.post("/api/phase4/confirm", async (req, res) => {
 
     const result = await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
-      const cycle = getCycle(store, userId);
+      let cycle = getCycle(store, userId);
+      if (!cycle) {
+        const postNumber = user.postCountToday + 1;
+        store.cycles[userId] = createCycle(userId, postNumber);
+        cycle = getCycle(store, userId);
+      }
       if (!cycle) {
         return {
           ok: false,
@@ -1304,7 +1309,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
       }
 
       const daySlotUsed = isDaySlotUsed(user);
-      const cost = daySlotUsed ? 1 : (isOfficial ? 0 : 1);
+      const cost = daySlotUsed ? 1 : 0;
 
       if (cost > 0 && user.coins < cost) {
         return {
