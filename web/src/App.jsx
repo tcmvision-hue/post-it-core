@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getUser, syncPendingPaymentFromUrl, syncUserFromUrl } from "./utils/user";
 import { apiFetch } from "./utils/api";
 import { useI18n } from "./i18n/I18nContext";
+import { translations } from "./i18n/translations";
 
 /* UI – HOME */
 import Welcome from "./ui/home/Welcome";
@@ -152,6 +153,7 @@ function primeTodayVideoStartFrame() {
 export default function App() {
   const {
     lang,
+    setLang,
     shouldPromptLanguage,
     detectedLocalLang,
     confirmLanguageChoice,
@@ -170,6 +172,15 @@ export default function App() {
   const [hashtags, setHashtags] = useState([]);
   const [cycleMeta, setCycleMeta] = useState(null);
   const [confirmError, setConfirmError] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [postLifecycle, setPostLifecycle] = useState({
+    id: "",
+    activeId: "",
+    status: "idle",
+    error: "",
+    confirmed: false,
+    coinsRemaining: null,
+  });
 
   useEffect(() => {
     syncUserFromUrl();
@@ -195,20 +206,41 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (shouldPromptLanguage) return;
+    let cancelled = false;
 
     const user = getUser();
+    const payload = {
+      profileId: user.id,
+    };
+    if (!shouldPromptLanguage) {
+      payload.language = lang;
+    }
+
     apiFetch("/api/profile/bootstrap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profileId: user.id,
-        language: lang,
-      }),
-    }).catch(() => {
-      // profiel bootstrap probeert opnieuw op volgende call
-    });
-  }, [lang, shouldPromptLanguage]);
+      body: JSON.stringify(payload),
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (cancelled || !response.ok || !data?.ok || !data?.profile) return;
+        const serverLanguage = String(data.profile.primary_language || "").trim();
+        if (!serverLanguage) return;
+        if (serverLanguage !== lang) {
+          setLang(serverLanguage);
+        }
+        if (shouldPromptLanguage) {
+          confirmLanguageChoice(serverLanguage);
+        }
+      })
+      .catch(() => {
+        // profiel bootstrap probeert opnieuw op volgende call
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, setLang, shouldPromptLanguage, confirmLanguageChoice, detectedLocalLang]);
 
   useEffect(() => {
     if (phase === PHASES.EXPLANATION) {
@@ -333,10 +365,6 @@ export default function App() {
     };
   }, [phase]);
 
-  if (isDownloadRoute) {
-    return <Download />;
-  }
-
   function ensureCycleMeta() {
     if (cycleMeta) return cycleMeta;
     const now = new Date();
@@ -355,14 +383,15 @@ export default function App() {
   }
 
   function normalizePostPayload(postPayload) {
-    if (!postPayload) return { text: "", label: "", accent: "" };
+    if (!postPayload) return { text: "", label: "", accent: "", postId: "" };
     if (typeof postPayload === "string") {
-      return { text: postPayload, label: "", accent: "" };
+      return { text: postPayload, label: "", accent: "", postId: "" };
     }
     return {
       text: postPayload.text || "",
       label: postPayload.label || "",
       accent: postPayload.accent || postPayload.label || "",
+      postId: String(postPayload.postId || ""),
     };
   }
 
@@ -373,21 +402,74 @@ export default function App() {
         .slice(2)}`,
       type,
       kind: base.kind || type,
+      postId: String(base.postId || ""),
       text: base.text || "",
       label: base.label || "",
       accent: base.accent || base.label || "",
     };
   }
 
-  function restartGenerationFlow() {
-    setConfirmError("");
-    setGenerations([]);
-    setVariants([]);
-    setSelectedVariantId("");
-    setHashtags([]);
-    setShowGeneration(false);
-    setPhase(PHASES.COINS);
+  async function syncLifecycleFromStatus() {
+    try {
+      const user = getUser();
+      const response = await apiFetch("/api/phase4/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.ok) {
+        return { ok: false, data };
+      }
+
+      const confirmedPostId = String(data?.confirmedPostId || "");
+      const activePostId = String(data?.activePostId || confirmedPostId || "");
+      const coinsRemaining =
+        data?.coinsRemaining ?? data?.coinsLeft ?? data?.coins ?? null;
+
+      setPostLifecycle((prev) => {
+        if (confirming && prev?.status === "creating") {
+          return prev;
+        }
+        if (data?.confirmed && confirmedPostId) {
+          return {
+            id: confirmedPostId,
+            activeId: activePostId,
+            status: "confirmed",
+            error: "",
+            confirmed: true,
+            coinsRemaining,
+          };
+        }
+        return {
+          ...prev,
+          activeId: activePostId || prev.activeId,
+          coinsRemaining,
+        };
+      });
+
+      return {
+        ok: true,
+        confirmed: Boolean(data?.confirmed),
+        confirmedPostId,
+        activePostId,
+        coinsRemaining,
+      };
+    } catch {
+      return { ok: false };
+    }
   }
+
+  useEffect(() => {
+    if (
+      phase === PHASES.COINS
+      || phase === PHASES.FINAL
+      || phase === PHASES.PACKAGES
+    ) {
+      syncLifecycleFromStatus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   async function playShutterSound() {
     if (typeof window === "undefined") return;
@@ -451,22 +533,80 @@ export default function App() {
   }
 
   async function confirmSelection(postPayload) {
+    if (confirming) return;
     setConfirmError("");
+    setConfirming(true);
     try {
       const user = getUser();
       const normalizedInput = normalizePostPayload(postPayload);
+      const candidatePostId = String(normalizedInput.postId || "");
+      if (!candidatePostId) {
+        const message = "Bevestigen mislukt";
+        setConfirmError(message);
+        setPostLifecycle({
+          id: "",
+          status: "failed",
+          error: message,
+          confirmed: false,
+          coinsRemaining: null,
+        });
+        return;
+      }
+
+      setPostLifecycle({
+        id: candidatePostId,
+        activeId: "",
+        status: "creating",
+        error: "",
+        confirmed: false,
+        coinsRemaining: postLifecycle.coinsRemaining,
+      });
       const isOfficialSelection = postPayload?.kind === "official"
         || normalizedInput.label === "Origineel";
       const res = await apiFetch("/api/phase4/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, isOfficial: isOfficialSelection }),
+        body: JSON.stringify({
+          userId: user.id,
+          postId: candidatePostId,
+          isOfficial: isOfficialSelection,
+        }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
-        setConfirmError(data?.error || "Bevestigen mislukt");
+      const responsePostId = String(data?.postId || "");
+      const confirmedPostId = String(data?.confirmedPostId || responsePostId || candidatePostId);
+      const isConfirmedResponse = Boolean(res.ok && data?.ok && data?.confirmed === true);
+      const isAcceptedPost = Boolean(
+        confirmedPostId
+        && (confirmedPostId === candidatePostId || responsePostId === candidatePostId)
+      );
+
+      if (!isConfirmedResponse || !isAcceptedPost) {
+        const message = data?.error || "Bevestigen mislukt";
+        setConfirmError(message);
+        setPostLifecycle({
+          id: candidatePostId,
+          activeId: "",
+          status: "failed",
+          error: message,
+          confirmed: false,
+          coinsRemaining: data?.coinsRemaining ?? postLifecycle.coinsRemaining ?? null,
+        });
+        if (data?.error === "Insufficient coins") {
+          setPhase(PHASES.COINS);
+        }
         return;
       }
+
+      setPostLifecycle({
+        id: confirmedPostId,
+        activeId: confirmedPostId,
+        status: "confirmed",
+        error: "",
+        confirmed: true,
+        coinsRemaining: data?.coinsRemaining ?? null,
+      });
+
       const normalized = normalizedInput;
       const generationVariants = (generations || []).map((entry, index) => {
         const normalizedEntry = normalizePostPayload(entry);
@@ -480,13 +620,16 @@ export default function App() {
             label,
             accent: normalizedEntry.accent || label,
             kind: entry?.kind || "generation",
+            postId: normalizedEntry.postId,
           },
           "generation"
         );
       });
 
       const chosen = generationVariants.find(
-        (variant) => variant.text === normalized.text
+        (variant) => (variant.postId && normalized.postId
+          ? variant.postId === normalized.postId
+          : variant.text === normalized.text)
       );
       const fallback = createVariant(
         {
@@ -494,6 +637,7 @@ export default function App() {
           label: "Origineel",
           accent: normalized.label,
           kind: "official",
+          postId: normalized.postId,
         },
         "original"
       );
@@ -507,8 +651,21 @@ export default function App() {
       setHashtags([]);
       setPhase(PHASES.FINAL);
     } catch {
-      setConfirmError("Bevestigen mislukt");
+      const message = "Bevestigen mislukt";
+      setConfirmError(message);
+      setPostLifecycle((prev) => ({
+        ...prev,
+        status: "failed",
+        error: message,
+        confirmed: false,
+      }));
+    } finally {
+      setConfirming(false);
     }
+  }
+
+  if (isDownloadRoute) {
+    return <Download />;
   }
 
   /* HOME */
@@ -560,20 +717,27 @@ export default function App() {
               >
                 {t("lang.modal.local")}: {getLanguageName(detectedLocalLang)}
               </button>
-              <button
-                style={{
-                  width: "100%",
-                  border: "1px solid #145C63",
-                  borderRadius: 10,
-                  padding: "10px 12px",
-                  background: "#fff",
-                  color: "#145C63",
-                  cursor: "pointer",
-                }}
-                onClick={() => confirmLanguageChoice("en")}
-              >
-                {t("lang.modal.english")}
-              </button>
+
+              {Object.keys(translations)
+                .filter((code) => code !== detectedLocalLang)
+                .map((code) => (
+                  <button
+                    key={code}
+                    style={{
+                      width: "100%",
+                      border: "1px solid #145C63",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      background: "#fff",
+                      color: "#145C63",
+                      cursor: "pointer",
+                      marginTop: 8,
+                    }}
+                    onClick={() => confirmLanguageChoice(code)}
+                  >
+                    {getLanguageName(code)}
+                  </button>
+                ))}
             </div>
           </div>
         )}
@@ -603,6 +767,15 @@ export default function App() {
           setSelectedVariantId("");
           setCycleMeta(null);
           setShowGeneration(false);
+          setConfirming(false);
+          setPostLifecycle({
+            id: "",
+            activeId: "",
+            status: "idle",
+            error: "",
+            confirmed: false,
+            coinsRemaining: null,
+          });
           setPhase(PHASES.COINS);
         }}
       />
@@ -641,10 +814,21 @@ export default function App() {
             generations={generations}
             confirmError={confirmError}
             onGenerate={(post) =>
-              setGenerations((prev) => [...prev, post])
+              {
+                setGenerations((prev) => [...prev, post]);
+                setPostLifecycle({
+                  id: String(post?.postId || ""),
+                  activeId: "",
+                  status: "creating",
+                  error: "",
+                  confirmed: false,
+                  coinsRemaining: post?.coinsRemaining ?? null,
+                });
+              }
             }
             onConfirm={(post) => confirmSelection(post)}
             onReview={() => setPhase(PHASES.SELECT)}
+            confirming={confirming}
           />
         </div>
 
@@ -666,7 +850,7 @@ export default function App() {
         posts={generations}
         confirmError={confirmError}
         onSelect={(post) => confirmSelection(post)}
-        onRegenerate={restartGenerationFlow}
+        confirming={confirming}
       />
     );
   }
@@ -694,9 +878,7 @@ export default function App() {
         }
         cycleMeta={cycleMeta}
         onViewPackages={() => setPhase(PHASES.PACKAGES)}
-        onRegenerate={() => {
-          restartGenerationFlow();
-        }}
+        activePostId={postLifecycle.activeId || postLifecycle.id || ""}
         onFinishSession={() => {
           clearStoredIntake();
           if (typeof window !== "undefined") {
@@ -720,9 +902,16 @@ export default function App() {
     return (
       <Phase4Options
         post={
-          variants.find((variant) => variant.id === selectedVariantId)
-            ?.text || ""
+          variants.find((variant) => variant.postId
+            && variant.postId === (postLifecycle.activeId || postLifecycle.id))
+            ?.text
+          || variants.find((variant) => variant.id === selectedVariantId)?.text
+          || variants[0]?.text
+          || ""
         }
+        activePostId={postLifecycle.confirmed
+          ? (postLifecycle.activeId || postLifecycle.id)
+          : ""}
         hashtags={hashtags}
         onVariantAdd={(variant) => {
           const normalized = normalizePostPayload(variant);
@@ -740,7 +929,6 @@ export default function App() {
           setHashtags([]);
         }}
         onHashtagsUpdate={(next) => setHashtags(next || [])}
-        onRegenerate={restartGenerationFlow}
         onBack={() => setPhase(PHASES.FINAL)}
       />
     );

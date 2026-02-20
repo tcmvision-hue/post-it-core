@@ -1,0 +1,11 @@
+{
+  "framework": null,
+  "installCommand": "npm install && cd web && npm install",
+  "buildCommand": "cd web && npm run build",
+  "outputDirectory": "web/dist",
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 10
+    }
+  }
+}

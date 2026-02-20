@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getUser } from "../../utils/user";
 import { apiFetch } from "../../utils/api";
 import { primaryHomeButtonStyle } from "./sharedStyles";
@@ -14,15 +14,55 @@ export default function Output({
   onToggleHashtag,
   cycleMeta,
   onViewPackages,
-  onRegenerate,
+  activePostId,
   onFinishSession,
 }) {
   const { t } = useI18n();
   const [downloadError, setDownloadError] = useState("");
   const [downloadLoading, setDownloadLoading] = useState("");
+  const [confirmedPostId, setConfirmedPostId] = useState("");
+  const [statusActivePostId, setStatusActivePostId] = useState("");
 
   const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
   const isMobile = /android|iphone|ipad|ipod/i.test(userAgent);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadConfirmedPostId() {
+      try {
+        const user = getUser();
+        const res = await apiFetch("/api/phase4/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok && data?.ok) {
+          const confirmedId = String(data?.confirmedPostId || "");
+          const activeId = String(data?.activePostId || confirmedId || "");
+          if (confirmedId) {
+            setConfirmedPostId(confirmedId);
+          }
+          if (activeId) {
+            setStatusActivePostId(activeId);
+          }
+        }
+      } catch {
+        // ignore status refresh failure here
+      }
+    }
+
+    loadConfirmedPostId();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function createActionId(prefix) {
+    return `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   function escapeHtml(value) {
     return String(value || "")
@@ -320,22 +360,65 @@ export default function Output({
   }
 
   async function downloadPost(variant) {
+    if (downloadLoading) return;
     setDownloadError("");
     setDownloadLoading(variant?.id || "");
     try {
       const user = getUser();
-      const res = await apiFetch("/api/phase4/download-variant", {
+      const actionId = createActionId("download");
+      const requestedPostId = String(
+        variant?.postId
+        || statusActivePostId
+        || activePostId
+        || confirmedPostId
+        || ""
+      );
+      let res = await apiFetch("/api/phase4/download-variant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
+          postId: requestedPostId,
           isOfficial: variant?.kind === "official",
+          actionId,
         }),
       });
-      const data = await res.json();
+      let data = await res.json().catch(() => ({}));
+
+      if (!res.ok && (data?.error === "Unknown postId" || data?.error === "Missing postId")) {
+        const statusRes = await apiFetch("/api/phase4/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id }),
+        });
+        const statusData = await statusRes.json().catch(() => ({}));
+        const retryPostId = String(statusData?.activePostId || statusData?.confirmedPostId || "");
+
+        if (statusRes.ok && statusData?.ok && retryPostId) {
+          setConfirmedPostId(retryPostId);
+          setStatusActivePostId(retryPostId);
+          res = await apiFetch("/api/phase4/download-variant", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: user.id,
+              postId: retryPostId,
+              isOfficial: true,
+              actionId: createActionId("download-retry"),
+            }),
+          });
+          data = await res.json().catch(() => ({}));
+        }
+      }
+
       if (!res.ok || !data?.ok) {
         setDownloadError(data?.error || t("output.download.error"));
         return;
+      }
+
+      const responseActivePostId = String(data?.activePostId || data?.postId || "");
+      if (responseActivePostId) {
+        setStatusActivePostId(responseActivePostId);
       }
 
     const date = cycleMeta?.date || new Date().toISOString().split("T")[0];
@@ -389,7 +472,11 @@ export default function Output({
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 1000);
+    } catch {
+      setDownloadError(t("output.download.error"));
     } finally {
       setDownloadLoading("");
     }
@@ -462,7 +549,8 @@ export default function Output({
                           opacity: downloadLoading === variant.id ? 0.55 : 1,
                         }}
                       >
-                        {variant.kind === "official"
+                        {String(variant?.postId || "")
+                          === String(statusActivePostId || activePostId || confirmedPostId || "")
                           ? t("output.download.free")
                           : t("output.download.paid")}
                       </button>
@@ -502,7 +590,6 @@ export default function Output({
 
           <div style={styles.card}>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button style={styles.actionButton} onClick={onRegenerate}>{t("generation.regenerate")}</button>
               <button style={styles.actionButton} onClick={onViewPackages}>{t("output.options")}</button>
               <button style={styles.actionButton} onClick={onFinishSession}>{t("output.finish")}</button>
             </div>

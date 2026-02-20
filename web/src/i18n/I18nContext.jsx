@@ -2,9 +2,11 @@ import { createContext, useContext, useMemo, useState } from "react";
 import { APP_UI_LANGUAGES, LANGUAGE_NAMES, translations } from "./translations";
 
 const STORAGE_KEY = "post_this_app_lang";
+const UI_LANGUAGE_KEYS = Object.keys(translations || {});
 
 function normalizeLang(value) {
   const base = String(value || "").toLowerCase().split(/[-_]/)[0];
+  if (UI_LANGUAGE_KEYS.includes(base)) return base;
   if (APP_UI_LANGUAGES.includes(base)) return base;
   return "en";
 }

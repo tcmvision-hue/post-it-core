@@ -16,11 +16,16 @@ export default function Generation({
   onGenerate,
   onConfirm,
   onReview,
+  confirming,
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [keywords, setKeywords] = useState("");
   const [error, setError] = useState("");
+
+  function createActionId(prefix) {
+    return `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   const generationCount = generations.length;
   const currentPost = generations[generationCount - 1] ?? null;
@@ -34,12 +39,17 @@ export default function Generation({
   }, []);
 
   async function runGeneration() {
-    if (loading) return;
+    if (loading || confirming) return;
+    if (generationCount >= 3) {
+      setError("Regenerate limit reached");
+      return;
+    }
     setLoading(true);
     setError("");
 
     try {
       const user = getUser();
+      const actionId = createActionId("generate");
       const res = await apiFetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -50,13 +60,17 @@ export default function Generation({
           intentie,
           context: waaromNu,
           keywords: keywords || undefined,
+          actionId,
         }),
       });
 
-      const data = await res.json();
-      if (res.ok && data?.post) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok && data?.post && data?.postId) {
         onGenerate({
           text: data.post,
+          postId: data.postId,
+          confirmed: Boolean(data.confirmed),
+          coinsRemaining: data.coinsRemaining,
           label: keywords.trim(),
           accent: keywords.trim(),
           kind: generationCount === 0 ? "official" : "generation",
@@ -64,6 +78,8 @@ export default function Generation({
       } else {
         setError(data?.error || t("generation.error"));
       }
+    } catch {
+      setError(t("generation.error"));
     } finally {
       setLoading(false);
     }
@@ -88,7 +104,7 @@ export default function Generation({
           <h2 style={{ marginTop: 0, marginBottom: 8 }}>
             {t("generation.title", {
               current: Math.max(1, generationCount),
-              max: "∞",
+              max: 3,
             })}
           </h2>
 
@@ -128,24 +144,32 @@ export default function Generation({
           {loading && currentPost && <p style={{ marginTop: 10 }}>{t("generation.loading")}</p>}
 
           <div style={styles.actions}>
-            {currentPost && (
-              <button style={styles.button(loading)} onClick={runGeneration} disabled={loading}>
+            {currentPost && generationCount < 3 && (
+              <button
+                style={styles.button(loading || confirming)}
+                onClick={runGeneration}
+                disabled={loading || confirming}
+              >
                 {t("generation.regenerate")}
               </button>
             )}
 
             {currentPost && generationCount > 0 && (
               <button
-                style={styles.button(loading)}
+                style={styles.button(loading || confirming)}
                 onClick={() => onConfirm(currentPost)}
-                disabled={loading}
+                disabled={loading || confirming}
               >
                 {t("common.confirm")}
               </button>
             )}
 
-            {currentPost && generationCount > 1 && (
-              <button style={styles.button(loading)} onClick={onReview} disabled={loading}>
+            {currentPost && generationCount === 3 && (
+              <button
+                style={styles.button(loading || confirming)}
+                onClick={onReview}
+                disabled={loading || confirming}
+              >
                 {t("generation.select")}
               </button>
             )}

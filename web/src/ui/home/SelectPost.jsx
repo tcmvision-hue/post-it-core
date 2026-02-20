@@ -1,54 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { clearPendingPaymentId, getPendingPaymentId, getUser } from "../../utils/user";
-import { apiFetch } from "../../utils/api";
+import { useMemo, useState } from "react";
 import { primaryHomeButtonStyle } from "./sharedStyles";
 import { useI18n } from "../../i18n/I18nContext";
 
-export default function SelectPost({ posts, onSelect, confirmError, onRegenerate }) {
+export default function SelectPost({ posts, onSelect, confirmError, confirming }) {
   const { t } = useI18n();
 
-  const [statusError, setStatusError] = useState("");
   const [backgroundImageOk, setBackgroundImageOk] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadStatus() {
-      setStatusError("");
-      try {
-        const user = getUser();
-        const paymentId = getPendingPaymentId();
-        const res = await apiFetch("/api/phase4/status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id, paymentId }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          if (!cancelled) setStatusError(data?.error || t("select.error.status"));
-          return;
-        }
-        if (cancelled) return;
-        if (data?.paymentReconciled) {
-          clearPendingPaymentId();
-        }
-      } catch {
-        if (!cancelled) setStatusError(t("select.error.status"));
-      }
-    }
-
-    loadStatus();
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
 
   function preventCopy(event) {
     event.preventDefault();
   }
 
   const cardPosts = useMemo(
-    () => (Array.isArray(posts) ? posts : []),
+    () => (Array.isArray(posts) ? posts.slice(0, 3) : []),
     [posts]
   );
 
@@ -94,9 +58,9 @@ export default function SelectPost({ posts, onSelect, confirmError, onRegenerate
           </div>
 
           <div style={styles.cardsColumn}>
-          {(confirmError || statusError) && (
+          {confirmError && (
             <div style={styles.statusCard}>
-              <p style={{ margin: 0, color: "#A33" }}>{confirmError || statusError}</p>
+              <p style={{ margin: 0, color: "#A33" }}>{confirmError}</p>
             </div>
           )}
 
@@ -125,28 +89,16 @@ export default function SelectPost({ posts, onSelect, confirmError, onRegenerate
                   style={{
                     ...primaryHomeButtonStyle,
                     marginTop: 12,
-                    opacity: 1,
-                    cursor: "pointer",
+                    opacity: confirming ? 0.55 : 1,
+                    cursor: confirming ? "not-allowed" : "pointer",
                   }}
+                  disabled={confirming}
                 >
                   {t("select.choose")}
                 </button>
               </div>
             );
           })}
-
-          <div style={styles.statusCard}>
-            <button
-              onClick={onRegenerate}
-              style={{
-                ...primaryHomeButtonStyle,
-                width: "100%",
-                marginTop: 0,
-              }}
-            >
-              {t("generation.regenerate")}
-            </button>
-          </div>
           </div>
         </div>
       </div>

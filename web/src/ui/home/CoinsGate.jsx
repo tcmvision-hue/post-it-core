@@ -35,14 +35,15 @@ export default function CoinsGate({ onStart }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, paymentId }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setStatus(data);
         if (data?.paymentReconciled) {
           clearPendingPaymentId();
         }
       } else {
-        setError(data?.error || t("coins.error.status"));
+        const details = data?.error ? `: ${data.error}` : "";
+        setError(`${t("coins.error.status")}${details}`);
       }
     } catch {
       setError(t("coins.error.status"));

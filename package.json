@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node api.mjs",
+    "dev": "cd web && npm run dev",
     "generate:icons": "node web/scripts/generate-icons.mjs"
   },
   "dependencies": {

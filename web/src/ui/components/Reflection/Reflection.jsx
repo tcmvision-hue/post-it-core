@@ -3,6 +3,7 @@ import {
   REFLECTION_FRAMES,
   REFLECTION_LOGO,
 } from "./reflectionAssets";
+import { useI18n } from "../../../i18n/I18nContext";
 
 /*
   CANON REFLECTION
@@ -19,6 +20,7 @@ const FADE_OUT_DURATION = 1500;
 const LOGO_DELAY = FRAME_DURATION * 2;
 
 export default function Reflection({ onFadeOutStart, onDone }) {
+  const { t } = useI18n();
   const [frameIndex, setFrameIndex] = useState(0);
   const [visible, setVisible] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
@@ -173,9 +175,9 @@ export default function Reflection({ onFadeOutStart, onDone }) {
           zIndex: 12,
         }}
       >
-        <h2 style={{ marginTop: 0, marginBottom: 10 }}>Een moment alstublieft</h2>
+        <h2 style={{ marginTop: 0, marginBottom: 10 }}>{t("reflection.title")}</h2>
         <p style={{ marginTop: 10, marginBottom: 0, lineHeight: 1.45 }}>
-          We zijn uw post aan het voorbereiden.
+          {t("reflection.text")}
         </p>
       </div>
     </div>

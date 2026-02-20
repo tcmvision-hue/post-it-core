@@ -13,10 +13,10 @@ import { useI18n } from "../../i18n/I18nContext";
 
 export default function Phase4Options({
   post,
+  activePostId,
   hashtags,
   onVariantAdd,
   onHashtagsUpdate,
-  onRegenerate,
   onBack,
 }) {
   const { t } = useI18n();
@@ -25,9 +25,14 @@ export default function Phase4Options({
   const [loadingKey, setLoadingKey] = useState("");
   const [tone, setTone] = useState("");
   const [coins, setCoins] = useState(null);
+  const [statusConfirmedPostId, setStatusConfirmedPostId] = useState("");
   const [outputLanguage, setOutputLanguage] = useState("en");
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState("");
+
+  function createActionId(prefix) {
+    return `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   function savePackagesReturnContext() {
     if (typeof window === "undefined") return;
@@ -93,23 +98,33 @@ export default function Phase4Options({
         body: JSON.stringify({ userId: user.id, paymentId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setCoins(data?.coins ?? 0);
+      if (res.ok && data?.ok) {
+        setCoins(data?.coins ?? data?.coinsLeft ?? data?.coinsRemaining ?? 0);
+        setStatusConfirmedPostId(String(data?.confirmedPostId || ""));
         if (data?.paymentReconciled) {
           clearPendingPaymentId();
         }
+      } else {
+        setError(data?.error || t("coins.error.status"));
       }
     } catch {
-      // ignore status errors here
+      setError(t("coins.error.status"));
     }
   }
 
   async function applyOption(optionKey) {
+    if (loadingKey) return;
     setError("");
     setAction("");
     setLoadingKey(optionKey);
     try {
       if (!post) {
+        setError(t("phase4.error.missingPost"));
+        return;
+      }
+
+      const effectiveActivePostId = String(activePostId || statusConfirmedPostId || "");
+      if (!effectiveActivePostId) {
         setError(t("phase4.error.missingPost"));
         return;
       }
@@ -125,15 +140,18 @@ export default function Phase4Options({
       }
 
       const user = getUser();
+      const actionId = createActionId(`option-${optionKey}`);
       const res = await apiFetch("/api/phase4/option", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
+          postId: effectiveActivePostId,
           optionKey,
           post,
           tone: optionKey === "tone" ? tone : undefined,
           targetLanguage: optionKey === "language" ? outputLanguage : undefined,
+          actionId,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -153,6 +171,7 @@ export default function Phase4Options({
               : t("phase4.variant.rephrased");
           onVariantAdd({
             text: data.post,
+            postId: String(data?.postId || ""),
             label,
             accent: optionKey === "tone" ? tone.trim() : undefined,
             type: optionKey === "tone" ? "tone" : optionKey === "language" ? "language" : "rephrase",
@@ -167,7 +186,11 @@ export default function Phase4Options({
       } else {
         if (data?.error === "Insufficient coins") {
           setError(t("coins.note.lock"));
-        } else if (data?.error === "No confirmed post") {
+        } else if (
+          data?.error === "No confirmed post"
+          || data?.error === "Post not confirmed"
+          || data?.error === "Post not active"
+        ) {
           setError(t("phase4.error.missingPost"));
         } else {
           setError(data?.error || t("phase4.error.action"));
@@ -241,9 +264,9 @@ export default function Phase4Options({
               <div style={styles.optionRow}>
                 <span>{t("phase4.option.tone")}</span>
                 <button
-                  style={styles.button(loadingKey === "tone")}
+                  style={styles.button(loadingKey === "tone" || Number(coins || 0) < 2)}
                   onClick={() => applyOption("tone")}
-                  disabled={loadingKey === "tone"}
+                  disabled={loadingKey === "tone" || Number(coins || 0) < 2}
                 >
                   {t("phase4.use")}
                 </button>
@@ -257,9 +280,9 @@ export default function Phase4Options({
               <div style={styles.optionRow}>
                 <span>{t("phase4.option.hashtags")}</span>
                 <button
-                  style={styles.button(loadingKey === "hashtags")}
+                  style={styles.button(loadingKey === "hashtags" || Number(coins || 0) < 1)}
                   onClick={() => applyOption("hashtags")}
-                  disabled={loadingKey === "hashtags"}
+                  disabled={loadingKey === "hashtags" || Number(coins || 0) < 1}
                 >
                   {t("phase4.use")}
                 </button>
@@ -267,9 +290,9 @@ export default function Phase4Options({
               <div style={styles.optionRow}>
                 <span>{t("phase4.option.rephrase")}</span>
                 <button
-                  style={styles.button(loadingKey === "rephrase")}
+                  style={styles.button(loadingKey === "rephrase" || Number(coins || 0) < 1)}
                   onClick={() => applyOption("rephrase")}
-                  disabled={loadingKey === "rephrase"}
+                  disabled={loadingKey === "rephrase" || Number(coins || 0) < 1}
                 >
                   {t("phase4.use")}
                 </button>
@@ -278,9 +301,9 @@ export default function Phase4Options({
               <div style={styles.optionRow}>
                 <span>{t("phase4.option.language")}</span>
                 <button
-                  style={styles.button(loadingKey === "language")}
+                  style={styles.button(loadingKey === "language" || Number(coins || 0) < 3)}
                   onClick={() => applyOption("language")}
-                  disabled={loadingKey === "language"}
+                  disabled={loadingKey === "language" || Number(coins || 0) < 3}
                 >
                   {t("phase4.use")}
                 </button>
@@ -309,7 +332,6 @@ export default function Phase4Options({
             <div style={styles.card}>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button style={styles.button(false)} onClick={onBack}>{t("phase4.back")}</button>
-                <button style={styles.button(false)} onClick={onRegenerate}>{t("generation.regenerate")}</button>
               </div>
             </div>
 

@@ -207,6 +207,7 @@ function ensureUser(store, userId, preferredLanguage) {
       coins: 0,
       last_free_post_date: null,
       last_free_post_timestamp: null,
+      last_free_download_timestamp: null,
       created_at: new Date().toISOString(),
       day: todayKey(),
       postCountToday: 0,
@@ -222,6 +223,9 @@ function ensureUser(store, userId, preferredLanguage) {
     user.last_free_post_timestamp = Number.isFinite(migrated)
       ? new Date(migrated).toISOString()
       : null;
+  }
+  if (typeof user.last_free_download_timestamp === "undefined") {
+    user.last_free_download_timestamp = null;
   }
 
   if (!user.primary_language) {
@@ -367,8 +371,26 @@ app.post("/api/profile/bootstrap", async (req, res) => {
     }
 
     const profile = await withStore((store) => {
-      const user = ensureUser(store, profileId, language);
+      const normalizedLanguage = normalizeOutputLanguage(language, "");
+      const hasRequestedLanguage = Boolean(normalizedLanguage && normalizedLanguage !== "auto");
+      const hasExistingProfile = Boolean(store.users?.[profileId]);
+
+      if (!hasExistingProfile && !hasRequestedLanguage) {
+        return {
+          ok: false,
+          error: "Language required",
+          requiresLanguage: true,
+        };
+      }
+
+      const user = ensureUser(
+        store,
+        profileId,
+        hasRequestedLanguage ? normalizedLanguage : undefined
+      );
       return {
+        ok: true,
+        isNewProfile: !hasExistingProfile,
         profile_id: user.profile_id,
         primary_language: user.primary_language,
         coins: user.coins,
@@ -376,6 +398,10 @@ app.post("/api/profile/bootstrap", async (req, res) => {
         created_at: user.created_at,
       };
     });
+
+    if (!profile?.ok) {
+      return res.status(400).json(profile);
+    }
 
     setUserCookie(res, profileId);
     res.json({ ok: true, profile });
@@ -416,17 +442,20 @@ app.post("/api/profile/primary-language", async (req, res) => {
         };
       }
 
-      const cost = 3;
-      if (user.coins < cost) {
+      const adminSecret = String(process.env.ADMIN_SECRET || "").trim();
+      const providedSecret = String(req.headers["x-admin-secret"] || "").trim();
+      const isAdminReset = Boolean(adminSecret && providedSecret && adminSecret === providedSecret);
+      if (!isAdminReset) {
         return {
           ok: false,
-          error: "Insufficient coins",
+          error: "Primary language locked",
           coins: user.coins,
-          cost,
+          coinsLeft: user.coins,
+          primaryLanguage: currentPrimaryLanguage,
         };
       }
 
-      user.coins -= cost;
+      const cost = 0;
       user.primary_language = normalizedTargetLanguage;
       return {
         ok: true,
@@ -459,7 +488,6 @@ function costForOption(optionKey) {
   if (optionKey === "tone") return 2;
   if (optionKey === "hashtags") return 1;
   if (optionKey === "rephrase") return 1;
-  if (optionKey === "regenerate") return 0;
   if (optionKey === "language") return 3;
   if (optionKey === "download") return 1;
   return null;
@@ -515,6 +543,7 @@ function createCycle(userId, postNumber) {
     startedAt: Date.now(),
     confirmed: false,
     confirmedPostId: null,
+    activePostId: null,
     confirmedWasFree: false,
     startCostCharged: 0,
     actionResults: {},
@@ -740,6 +769,27 @@ function readStateCookie(req, userId) {
   }
 }
 
+function compactCycleForStateCookie(cycle) {
+  if (!cycle || typeof cycle !== "object") return null;
+  return {
+    id: String(cycle.id || ""),
+    userId: String(cycle.userId || ""),
+    day: String(cycle.day || ""),
+    startedAt: Number(cycle.startedAt) || Date.now(),
+    postNumber: Number(cycle.postNumber) || 1,
+    generationIndex: Number(cycle.generationIndex) || 0,
+    variantCount: Number(cycle.variantCount) || 0,
+    optionVariantCount: Number(cycle.optionVariantCount) || 0,
+    regenerateCount: Number(cycle.regenerateCount) || 0,
+    confirmed: Boolean(cycle.confirmed),
+    confirmedAt: Number(cycle.confirmedAt) || 0,
+    confirmedPostId: cycle.confirmedPostId ? String(cycle.confirmedPostId) : null,
+    activePostId: cycle.activePostId ? String(cycle.activePostId) : null,
+    confirmedWasFree: Boolean(cycle.confirmedWasFree),
+    startCostCharged: Number(cycle.startCostCharged) || 0,
+  };
+}
+
 function writeStateCookie(res, userId, user, cycle) {
   if (!userId || !user) return;
   const payload = {
@@ -748,7 +798,7 @@ function writeStateCookie(res, userId, user, cycle) {
     postCountToday: Number(user.postCountToday) || 0,
     coins: Number(user.coins) || 0,
     lastFreePostTimestamp: user.last_free_post_timestamp || null,
-    cycle: cycle || null,
+    cycle: compactCycleForStateCookie(cycle),
     ts: Date.now(),
   };
   try {
@@ -795,8 +845,39 @@ function hydrateFromStateCookie(req, store, userId) {
     state.cycle.day === today
   ) {
     const existing = getCycle(store, userId);
-    if (!existing || (Number(state.cycle.startedAt) || 0) >= (Number(existing.startedAt) || 0)) {
-      store.cycles[userId] = state.cycle;
+    const cookieStartedAt = Number(state.cycle.startedAt) || 0;
+    const existingStartedAt = Number(existing?.startedAt) || 0;
+    const shouldApplyCookieCycle =
+      !existing
+      || cookieStartedAt > existingStartedAt
+      || (
+        cookieStartedAt === existingStartedAt
+        && Boolean(state.cycle.confirmed)
+        && !Boolean(existing.confirmed)
+      );
+    if (shouldApplyCookieCycle) {
+      if (!existing) {
+        store.cycles[userId] = createCycle(userId, Number(state.cycle.postNumber) || 1);
+      }
+      const target = store.cycles[userId];
+      target.id = String(state.cycle.id || target.id || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+      target.userId = userId;
+      target.day = state.cycle.day || today;
+      target.startedAt = Number(state.cycle.startedAt) || target.startedAt || Date.now();
+      target.postNumber = Number(state.cycle.postNumber) || target.postNumber || 1;
+      target.generationIndex = Number(state.cycle.generationIndex) || target.generationIndex || 0;
+      target.variantCount = Number(state.cycle.variantCount) || target.variantCount || 0;
+      target.optionVariantCount = Number(state.cycle.optionVariantCount) || target.optionVariantCount || 0;
+      target.regenerateCount = Number(state.cycle.regenerateCount) || target.regenerateCount || 0;
+      target.confirmed = Boolean(state.cycle.confirmed);
+      target.confirmedAt = Number(state.cycle.confirmedAt) || target.confirmedAt || 0;
+      target.confirmedPostId = state.cycle.confirmedPostId ? String(state.cycle.confirmedPostId) : null;
+      target.activePostId = state.cycle.activePostId ? String(state.cycle.activePostId) : (target.confirmedPostId || null);
+      target.confirmedWasFree = Boolean(state.cycle.confirmedWasFree);
+      target.startCostCharged = Number(state.cycle.startCostCharged) || 0;
+      if (!Array.isArray(target.generatedPosts)) target.generatedPosts = [];
+      if (!Array.isArray(target.generatedItems)) target.generatedItems = [];
+      if (!target.actionResults || typeof target.actionResults !== "object") target.actionResults = {};
     }
   }
 
@@ -986,6 +1067,7 @@ app.post("/api/phase4/status", async (req, res) => {
         coinsRemaining: user.coins,
         confirmed: Boolean(cycle?.confirmed),
         confirmedPostId: cycle?.confirmedPostId || null,
+        activePostId: cycle?.activePostId || cycle?.confirmedPostId || null,
         postNumNext,
         daySlotUsed,
         costToStart,
@@ -1149,12 +1231,13 @@ app.post("/api/phase4/option", async (req, res) => {
         }
       }
 
-      if (!cycle.confirmedPostId || cycle.confirmedPostId !== postId) {
+      const activePostId = String(cycle.activePostId || cycle.confirmedPostId || "");
+      if (!activePostId || activePostId !== postId) {
         return {
           ok: false,
-          error: "Post not confirmed",
+          error: "Post not active",
           confirmed: true,
-          postId: cycle.confirmedPostId || postId,
+          postId: activePostId || postId,
           coinsRemaining: user.coins,
           coinsLeft: user.coins,
         };
@@ -1162,23 +1245,6 @@ app.post("/api/phase4/option", async (req, res) => {
 
       if (typeof cycle.optionVariantCount !== "number") {
         cycle.optionVariantCount = 0;
-      }
-
-      if (typeof cycle.regenerateCount !== "number") {
-        cycle.regenerateCount = 0;
-      }
-
-      if (optionKey === "regenerate" && cycle.regenerateCount >= 2) {
-        return {
-          ok: false,
-          error: "Regenerate limit reached",
-          postId,
-          confirmed: true,
-          regenerateCount: cycle.regenerateCount,
-          regeneratesRemaining: 0,
-          coinsRemaining: user.coins,
-          coinsLeft: user.coins,
-        };
       }
 
       const effectiveCost = areCoinBlocksDisabled() ? 0 : cost;
@@ -1257,38 +1323,6 @@ app.post("/api/phase4/option", async (req, res) => {
         });
       }
       return sendOptionResponse({ ...result, postId: variantPostId, post: rewritten });
-    }
-
-    if (optionKey === "regenerate") {
-      const rewritten = await rewritePost({ post, mode: "regenerate" });
-      if (activeCycle) {
-        if (typeof activeCycle.regenerateCount !== "number") {
-          activeCycle.regenerateCount = 0;
-        }
-        activeCycle.regenerateCount += 1;
-      }
-      const variantPostId = appendOptionVariant(activeCycle, {
-        postText: rewritten,
-        sourcePostId: result.sourcePostId,
-        optionKey,
-      }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
-      const regenerateCount = Number(activeCycle?.regenerateCount || 1);
-      if (activeCycle) {
-        setCycleActionResult(activeCycle, actionId, {
-          ...result,
-          postId: variantPostId,
-          regenerateCount,
-          regeneratesRemaining: Math.max(0, 2 - regenerateCount),
-          post: rewritten,
-        });
-      }
-      return sendOptionResponse({
-        ...result,
-        postId: variantPostId,
-        regenerateCount,
-        regeneratesRemaining: Math.max(0, 2 - regenerateCount),
-        post: rewritten,
-      });
     }
 
     if (optionKey === "language") {
@@ -1474,9 +1508,16 @@ app.post(
         if (payment?.status === "paid" && !entry.credited) {
           const user = ensureUser(store, entry.userId);
           const coins = Number(entry.coins) || 0;
+          const previousCoins = Number(user.coins) || 0;
           entry.coins = coins;
-          user.coins = (Number(user.coins) || 0) + coins;
+          user.coins = previousCoins + coins;
           entry.credited = true;
+          console.log("[MOLLIE_WEBHOOK_CREDIT]", {
+            profile_id: user.profile_id || entry.userId,
+            payment_id: paymentId,
+            coins_delta: coins,
+            new_balance: user.coins,
+          });
         }
       });
 
@@ -1671,19 +1712,7 @@ app.post("/api/generate", async (req, res) => {
       priorVariants: generationAccess.priorVariants,
     });
 
-    const activeCycle = generationAccess.__cookieState?.cycle;
-    const postId = `${activeCycle?.id || userId}-p${generationAccess.generationIndex}`;
-    if (activeCycle && Array.isArray(activeCycle.generatedPosts)) {
-      activeCycle.generatedPosts.push(result.post);
-    }
-    if (activeCycle && Array.isArray(activeCycle.generatedItems)) {
-      activeCycle.generatedItems.push({
-        id: postId,
-        text: result.post,
-        generationIndex: generationAccess.generationIndex,
-        createdAt: Date.now(),
-      });
-    }
+    const postId = `${generationAccess.__cookieState?.cycle?.id || userId}-p${generationAccess.generationIndex}`;
 
     const responsePayload = {
       ok: true,
@@ -1699,9 +1728,37 @@ app.post("/api/generate", async (req, res) => {
       regeneratesRemaining: generationAccess.regeneratesRemaining,
     };
 
-    if (activeCycle && actionId) {
-      setCycleActionResult(activeCycle, actionId, responsePayload);
-    }
+    await withStore((store) => {
+      const { user } = hydrateFromStateCookie(req, store, userId);
+      let cycle = getCycle(store, userId);
+      if (!cycle) {
+        const postNumber = user.postCountToday + 1;
+        store.cycles[userId] = createCycle(userId, postNumber);
+        cycle = getCycle(store, userId);
+      }
+      if (!cycle) return;
+
+      if (!Array.isArray(cycle.generatedPosts)) {
+        cycle.generatedPosts = [];
+      }
+      if (!Array.isArray(cycle.generatedItems)) {
+        cycle.generatedItems = [];
+      }
+
+      cycle.generatedPosts.push(result.post);
+      cycle.generatedItems.push({
+        id: postId,
+        text: result.post,
+        generationIndex: generationAccess.generationIndex,
+        createdAt: Date.now(),
+      });
+
+      if (actionId) {
+        setCycleActionResult(cycle, actionId, responsePayload);
+      }
+
+      generationAccess.__cookieState = { user, cycle };
+    });
 
     setUserCookie(res, userId);
     writeStateCookie(
@@ -1766,6 +1823,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
           confirmed: true,
           coinsRemaining: user.coins,
           coinsLeft: user.coins,
+          __cookieState: { user, cycle },
         };
       }
 
@@ -1820,6 +1878,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
       cycle.confirmed = true;
       cycle.confirmedAt = Date.now();
       cycle.confirmedPostId = postId;
+      cycle.activePostId = postId;
       cycle.confirmedWasFree = cost === 0;
 
       return {
@@ -1889,7 +1948,8 @@ app.post("/api/phase4/download-variant", async (req, res) => {
       const generatedItems = Array.isArray(cycle.generatedItems)
         ? cycle.generatedItems
         : [];
-      const postId = requestedPostId || String(cycle.confirmedPostId || "");
+      const activePostId = String(cycle.activePostId || cycle.confirmedPostId || "");
+      const postId = requestedPostId || activePostId;
       if (!postId) {
         return {
           ok: false,
@@ -1914,9 +1974,13 @@ app.post("/api/phase4/download-variant", async (req, res) => {
         };
       }
 
-      const isOfficial = cycle.confirmedPostId === postId;
-      const freeWindowActive = Boolean(cycle.confirmedWasFree && isDaySlotUsed(user));
-      const cost = isOfficial && freeWindowActive ? 0 : 1;
+      const isActiveVariant = activePostId === postId;
+      const lastFreeDownloadTs = Date.parse(String(user?.last_free_download_timestamp || ""));
+      const freeWindowAvailable = !Number.isFinite(lastFreeDownloadTs)
+        || (Date.now() - lastFreeDownloadTs >= MS_24H);
+      const cost = isActiveVariant
+        ? (freeWindowAvailable ? 0 : 1)
+        : 1;
 
       if (cost > 0 && user.coins < cost) {
         return {
@@ -1935,13 +1999,22 @@ app.post("/api/phase4/download-variant", async (req, res) => {
         user.coins -= cost;
       }
 
+      if (!isActiveVariant) {
+        cycle.activePostId = postId;
+      }
+
+      if (isActiveVariant && cost === 0) {
+        user.last_free_download_timestamp = new Date().toISOString();
+      }
+
       const responsePayload = {
         ok: true,
         postId,
         confirmed: true,
         cost,
-        freeWindowActive,
-        isOfficial,
+        freeWindowAvailable,
+        isActiveVariant: Boolean(cycle.activePostId === postId),
+        activePostId: cycle.activePostId || postId,
         coinsLeft: user.coins,
         coinsRemaining: user.coins,
       };

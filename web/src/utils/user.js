@@ -114,10 +114,21 @@ export function getUser() {
   syncUserFromUrl();
   syncPendingPaymentFromUrl();
 
-  const stored = localStorage.getItem(USER_STORAGE_KEY);
+  try {
+    const stored = localStorage.getItem(USER_STORAGE_KEY);
 
-  if (stored) {
-    return JSON.parse(stored);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed && typeof parsed.id === "string" && parsed.id.trim()) {
+        return parsed;
+      }
+    }
+  } catch {
+    try {
+      localStorage.removeItem(USER_STORAGE_KEY);
+    } catch {
+      // ignore storage errors
+    }
   }
 
   const user = {
@@ -126,6 +137,10 @@ export function getUser() {
     createdAt: Date.now(),
   };
 
-  localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  try {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  } catch {
+    // ignore storage errors
+  }
   return user;
 }

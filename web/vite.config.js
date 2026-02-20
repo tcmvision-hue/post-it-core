@@ -1,11 +1,11 @@
 import { defineConfig } from "vite";
 import { resolve } from "path";
 import react from "@vitejs/plugin-react";
-import apiApp from "./server/api.mjs";
 
 const apiMiddlewarePlugin = {
   name: "post-this-api-middleware",
-  configureServer(server) {
+  async configureServer(server) {
+    const { default: apiApp } = await import("./server/api.mjs");
     server.middlewares.use(apiApp);
   },
 };

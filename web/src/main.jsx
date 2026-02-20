@@ -24,27 +24,25 @@ function enforceHttpsOnPublicHost() {
   window.location.replace(secureUrl);
 }
 
-function registerServiceWorker() {
+function clearServiceWorkers() {
   if (typeof window === "undefined") return;
   if (!("serviceWorker" in navigator)) return;
 
-  if (!import.meta.env.PROD) {
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((registrations) => {
       registrations.forEach((registration) => registration.unregister());
+    })
+    .catch(() => {
+      // ignore service worker cleanup errors
     });
-    return;
-  }
-
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js");
-  });
 }
 
 const container = document.getElementById("root");
 const root = createRoot(container);
 
 enforceHttpsOnPublicHost();
-registerServiceWorker();
+clearServiceWorkers();
 
 root.render(
   <>

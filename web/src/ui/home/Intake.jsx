@@ -51,9 +51,9 @@ export default function Intake({ onComplete }) {
 
   const [error, setError] = useState("");
 
-  const MIN_WORDS = 20;
-  const MAX_WORDS = 220;
-  const MODERATION_CHECK_WORDS = 30;
+  const MIN_WORDS = 50;
+  const MAX_WORDS = 250;
+  const MODERATION_CHECK_WORDS = 50;
 
   function wordCount(text) {
     return text.trim().split(/\s+/).filter(Boolean).length;
