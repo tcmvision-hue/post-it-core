@@ -28,7 +28,6 @@ function getOpenAIClient() {
   return openaiClient;
 }
 const app = express();
-const PORT = 3001;
 const STORE_PATH = path.join(__dirname, "coinStore.json");
 let storeLock = Promise.resolve();
 const FALLBACK_STORE_KEY = "__post_this_coin_store";
@@ -57,6 +56,11 @@ app.use((req, res, next) => {
     "Access-Control-Allow-Headers",
     "Content-Type, x-admin-secret"
   );
+
+  // Debug logging
+  if (process.env.VERCEL) {
+    console.log("[DEBUG]", req.method, req.url, "baseUrl:", req.baseUrl, "path:", req.path);
+  }
 
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
@@ -455,9 +459,43 @@ function costForOption(optionKey) {
   if (optionKey === "tone") return 2;
   if (optionKey === "hashtags") return 1;
   if (optionKey === "rephrase") return 1;
+  if (optionKey === "regenerate") return 0;
   if (optionKey === "language") return 3;
   if (optionKey === "download") return 1;
   return null;
+}
+
+function normalizeActionId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.length > 120) return "";
+  if (!/^[A-Za-z0-9:_\-.]+$/.test(raw)) return "";
+  return raw;
+}
+
+function ensureCycleActionResults(cycle) {
+  if (!cycle || typeof cycle !== "object") return {};
+  if (!cycle.actionResults || typeof cycle.actionResults !== "object") {
+    cycle.actionResults = {};
+  }
+  return cycle.actionResults;
+}
+
+function setCycleActionResult(cycle, actionId, payload) {
+  if (!actionId) return;
+  const actionResults = ensureCycleActionResults(cycle);
+  actionResults[actionId] = {
+    ...(payload || {}),
+    _ts: Date.now(),
+  };
+  const entries = Object.entries(actionResults)
+    .sort((a, b) => (Number(a[1]?._ts) || 0) - (Number(b[1]?._ts) || 0));
+  const overflow = entries.length - 50;
+  if (overflow > 0) {
+    for (let index = 0; index < overflow; index += 1) {
+      delete actionResults[entries[index][0]];
+    }
+  }
 }
 
 function createCycle(userId, postNumber) {
@@ -471,10 +509,47 @@ function createCycle(userId, postNumber) {
     variantCount: 0,
     optionVariantCount: 0,
     generatedPosts: [],
+    generatedItems: [],
+    regenerateCount: 0,
     day: todayKey(),
     startedAt: Date.now(),
     confirmed: false,
+    confirmedPostId: null,
+    confirmedWasFree: false,
+    startCostCharged: 0,
+    actionResults: {},
   };
+}
+
+function appendOptionVariant(cycle, { postText, sourcePostId, optionKey }) {
+  if (!cycle || typeof cycle !== "object") return "";
+  if (!Array.isArray(cycle.generatedPosts)) {
+    cycle.generatedPosts = [];
+  }
+  if (!Array.isArray(cycle.generatedItems)) {
+    cycle.generatedItems = [];
+  }
+  if (typeof cycle.optionVariantCount !== "number") {
+    cycle.optionVariantCount = 0;
+  }
+
+  cycle.optionVariantCount += 1;
+  const variantPostId = `${cycle.id}-o${cycle.optionVariantCount}`;
+  const normalizedText = String(postText || "").trim();
+
+  if (normalizedText) {
+    cycle.generatedPosts.push(normalizedText);
+  }
+
+  cycle.generatedItems.push({
+    id: variantPostId,
+    text: normalizedText,
+    optionKey: String(optionKey || ""),
+    sourcePostId: String(sourcePostId || ""),
+    createdAt: Date.now(),
+  });
+
+  return variantPostId;
 }
 
 async function rewritePost({ post, tone, mode, targetLanguage }) {
@@ -485,49 +560,89 @@ async function rewritePost({ post, tone, mode, targetLanguage }) {
       ? `Herschrijf de post in deze toon: ${tone}.`
       : mode === "language"
         ? `Herschrijf en vertaal deze post naar de gevraagde outputtaal. ${languageInstruction(normalizedTargetLanguage)}`
+        : mode === "regenerate"
+          ? "Genereer een duidelijke nieuwe variant met dezelfde kernboodschap, maar met een andere opening, zinsritme en formulering."
         : "Herschrijf de post licht, met dezelfde betekenis.";
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0.4,
-    messages: [
-      {
-        role: "system",
-        content:
-          "Je herschrijft exact een korte zakelijke social post. Behoud altijd de oorspronkelijke kernboodschap en behoud dezelfde taal als de aangeleverde post, behalve als er expliciet om een andere taal wordt gevraagd in de opdracht. Geen uitleg. Geen vragen. Geen emojis. Geen hashtags. Geen CTA.",
-      },
-      {
-        role: "user",
-        content: `${instruction}\n\nPost:\n${post}`,
-      },
-    ],
-    max_tokens: 400,
-  });
+  const timeoutMs = 8000;
+  const withTimeout = (promise, label) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+      }),
+    ]);
 
-  let rewritten = response.choices[0]?.message?.content?.trim() || post;
+  const fallbackRewrite = () => {
+    const base = String(post || "").trim();
+    if (!base) return "";
+    if (mode === "regenerate") {
+      return `${base}\n\nAndere invalshoek: begin met één concrete stap die je team morgen uitvoert.`;
+    }
+    if (mode === "rephrase") {
+      return `${base}\n\nKort herformuleerd met dezelfde kernboodschap.`;
+    }
+    if (mode === "tone") {
+      return `${base}\n\nToon aangepast: ${String(tone || "zakelijk").trim() || "zakelijk"}.`;
+    }
+    if (mode === "language") {
+      return base;
+    }
+    return base;
+  };
 
-  if (mode === "language") {
-    const retry = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.25,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Je corrigeert exact één zakelijke social media post naar de gevraagde taal. Behoud de kernboodschap. Geen uitleg. Geen vragen. Geen emojis. Geen hashtags. Geen CTA.",
-        },
-        {
-          role: "user",
-          content: `Corrigeer deze post nu strikt naar deze taal: ${languageInstruction(normalizedTargetLanguage)}\n\nHarde regel: geef alleen de posttekst terug in exact die taal, zonder gemixte taal.\n\nOutput:\n${rewritten}`,
-        },
-      ],
-      max_tokens: 400,
-    });
+  try {
+    const response = await withTimeout(
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0.4,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Je herschrijft exact een korte zakelijke social post. Behoud altijd de oorspronkelijke kernboodschap en behoud dezelfde taal als de aangeleverde post, behalve als er expliciet om een andere taal wordt gevraagd in de opdracht. Geen uitleg. Geen vragen. Geen emojis. Geen hashtags. Geen CTA.",
+          },
+          {
+            role: "user",
+            content: `${instruction}\n\nPost:\n${post}`,
+          },
+        ],
+        max_tokens: 400,
+      }),
+      "rewritePost"
+    );
 
-    rewritten = retry.choices[0]?.message?.content?.trim() || rewritten;
+    let rewritten = response.choices[0]?.message?.content?.trim() || post;
+
+    if (mode === "language") {
+      const retry = await withTimeout(
+        openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          temperature: 0.25,
+          messages: [
+            {
+              role: "system",
+              content:
+                "Je corrigeert exact één zakelijke social media post naar de gevraagde taal. Behoud de kernboodschap. Geen uitleg. Geen vragen. Geen emojis. Geen hashtags. Geen CTA.",
+            },
+            {
+              role: "user",
+              content: `Corrigeer deze post nu strikt naar deze taal: ${languageInstruction(normalizedTargetLanguage)}\n\nHarde regel: geef alleen de posttekst terug in exact die taal, zonder gemixte taal.\n\nOutput:\n${rewritten}`,
+            },
+          ],
+          max_tokens: 400,
+        }),
+        "rewriteLanguagePost"
+      );
+
+      rewritten = retry.choices[0]?.message?.content?.trim() || rewritten;
+    }
+
+    return rewritten;
+  } catch (err) {
+    console.warn("rewritePost fallback used:", err?.message || err);
+    return fallbackRewrite();
   }
-
-  return rewritten;
 }
 
 async function generateHashtags(post) {
@@ -632,6 +747,7 @@ function writeStateCookie(res, userId, user, cycle) {
     day: user.day || todayKey(),
     postCountToday: Number(user.postCountToday) || 0,
     coins: Number(user.coins) || 0,
+    lastFreePostTimestamp: user.last_free_post_timestamp || null,
     cycle: cycle || null,
     ts: Date.now(),
   };
@@ -662,6 +778,15 @@ function hydrateFromStateCookie(req, store, userId) {
   const coins = Number(state.coins);
   if (Number.isFinite(coins) && coins > (Number(user.coins) || 0)) {
     user.coins = coins;
+  }
+
+  const cookieFreeTs = Date.parse(String(state.lastFreePostTimestamp || ""));
+  const userFreeTs = Date.parse(String(user.last_free_post_timestamp || ""));
+  if (Number.isFinite(cookieFreeTs)) {
+    if (!Number.isFinite(userFreeTs) || cookieFreeTs > userFreeTs) {
+      user.last_free_post_timestamp = new Date(cookieFreeTs).toISOString();
+      user.last_free_post_date = user.last_free_post_timestamp.split("T")[0] || user.last_free_post_date;
+    }
   }
 
   if (
@@ -837,23 +962,30 @@ app.post("/api/phase4/status", async (req, res) => {
     const userId = resolveUserId(req, payload.userId);
     const paymentId = payload.paymentId;
     if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
+      return res.status(400).json({ ok: false, error: "Missing userId" });
     }
 
     const status = await withStore(async (store) => {
-      const paymentReconciled = await reconcilePaymentByIdForUser(
-        store,
-        userId,
-        paymentId
-      );
-      await reconcilePendingPaymentsForUser(store, userId);
+      let paymentReconciled = false;
+      if (paymentId) {
+        paymentReconciled = await reconcilePaymentByIdForUser(
+          store,
+          userId,
+          paymentId
+        );
+      }
       const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
       const postNumNext = user.postCountToday + 1;
       const daySlotUsed = isDaySlotUsed(user);
       const costToStart = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
       return {
+        ok: true,
         coins: user.coins,
+        coinsLeft: user.coins,
+        coinsRemaining: user.coins,
+        confirmed: Boolean(cycle?.confirmed),
+        confirmedPostId: cycle?.confirmedPostId || null,
         postNumNext,
         daySlotUsed,
         costToStart,
@@ -869,7 +1001,7 @@ app.post("/api/phase4/status", async (req, res) => {
     res.json(status);
   } catch (err) {
     console.error("Phase4 status error:", err);
-    res.status(500).json({ error: "Status failed" });
+    res.status(500).json({ ok: false, error: "Status failed" });
   }
 });
 
@@ -878,7 +1010,7 @@ app.post("/api/phase4/start", async (req, res) => {
     const payload = req.body || {};
     const userId = resolveUserId(req, payload.userId);
     if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
+      return res.status(400).json({ ok: false, error: "Missing userId" });
     }
 
     const result = await withStore((store) => {
@@ -891,6 +1023,8 @@ app.post("/api/phase4/start", async (req, res) => {
           ok: false,
           error: "Insufficient coins",
           coins: user.coins,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
           postNumber: user.postCountToday + 1,
           costToStart,
         };
@@ -899,6 +1033,19 @@ app.post("/api/phase4/start", async (req, res) => {
       const postNumber = user.postCountToday + 1;
       store.cycles[userId] = createCycle(userId, postNumber);
       const cycle = getCycle(store, userId);
+      if (!cycle) {
+        return {
+          ok: false,
+          error: "Cycle create failed",
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (costToStart > 0) {
+        user.coins -= costToStart;
+      }
+      cycle.startCostCharged = costToStart;
 
       return {
         ok: true,
@@ -906,6 +1053,8 @@ app.post("/api/phase4/start", async (req, res) => {
         costToStart,
         daySlotUsed,
         coinsLeft: user.coins,
+        coinsRemaining: user.coins,
+        confirmed: false,
         __cookieState: { user, cycle },
       };
     });
@@ -914,13 +1063,20 @@ app.post("/api/phase4/start", async (req, res) => {
       return res.status(400).json(result);
     }
 
-    setUserCookie(res, userId);
-    writeStateCookie(res, userId, result.__cookieState?.user, result.__cookieState?.cycle);
+    const cookieState = result.__cookieState || {};
+    const activeUser = cookieState.user || null;
+    const activeCycle = cookieState.cycle || null;
     delete result.__cookieState;
-    res.json(result);
+
+    function sendOptionResponse(payload) {
+      setUserCookie(res, userId);
+      writeStateCookie(res, userId, activeUser, activeCycle);
+      return res.json(payload);
+    }
+    return sendOptionResponse(result);
   } catch (err) {
     console.error("Phase4 start error:", err);
-    res.status(500).json({ error: "Start failed" });
+    res.status(500).json({ ok: false, error: "Start failed" });
   }
 });
 
@@ -930,48 +1086,99 @@ app.post("/api/phase4/option", async (req, res) => {
     const userId = resolveUserId(req, payload.userId);
     const optionKey = payload.optionKey;
     const post = payload.post;
+    const postId = String(payload.postId || "").trim();
+    const actionId = normalizeActionId(payload.actionId);
     const tone = payload.tone;
     const targetLanguageRaw =
       payload.targetLanguage ?? payload.outputLanguage ?? payload.language;
     if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
+      return res.status(400).json({ ok: false, error: "Missing userId" });
     }
     if (optionKey === "download") {
-      return res.status(400).json({ error: "Use download endpoint" });
+      return res.status(400).json({ ok: false, error: "Use download endpoint" });
     }
 
     const cost = costForOption(optionKey);
     if (cost === null) {
-      return res.status(400).json({ error: "Unknown option" });
+      return res.status(400).json({ ok: false, error: "Unknown option" });
     }
 
     if (!post || typeof post !== "string") {
-      return res.status(400).json({ error: "Missing post" });
+      return res.status(400).json({ ok: false, error: "Missing post" });
+    }
+
+    if (!postId) {
+      return res.status(400).json({ ok: false, error: "Missing postId" });
     }
 
     if (optionKey === "tone" && (!tone || typeof tone !== "string")) {
-      return res.status(400).json({ error: "Missing tone" });
+      return res.status(400).json({ ok: false, error: "Missing tone" });
     }
 
     if (optionKey === "language" && (!targetLanguageRaw || typeof targetLanguageRaw !== "string")) {
-      return res.status(400).json({ error: "Missing targetLanguage" });
+      return res.status(400).json({ ok: false, error: "Missing targetLanguage" });
     }
     if (optionKey === "language" && !isSupportedOutputLanguage(targetLanguageRaw)) {
-      return res.status(400).json({ error: "Invalid targetLanguage" });
+      return res.status(400).json({ ok: false, error: "Invalid targetLanguage" });
     }
 
     const result = await withStore((store) => {
-      const user = ensureUser(store, userId);
+      const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
+
       if (!cycle || !cycle.confirmed) {
         return {
           ok: false,
           error: "No confirmed post",
+          confirmed: false,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (actionId) {
+        const cached = ensureCycleActionResults(cycle)[actionId];
+        if (cached && cached.ok) {
+          const cachedPayload = { ...cached };
+          delete cachedPayload._ts;
+          return {
+            ...cachedPayload,
+            idempotentReplay: true,
+            __cookieState: { user, cycle },
+          };
+        }
+      }
+
+      if (!cycle.confirmedPostId || cycle.confirmedPostId !== postId) {
+        return {
+          ok: false,
+          error: "Post not confirmed",
+          confirmed: true,
+          postId: cycle.confirmedPostId || postId,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
         };
       }
 
       if (typeof cycle.optionVariantCount !== "number") {
         cycle.optionVariantCount = 0;
+      }
+
+      if (typeof cycle.regenerateCount !== "number") {
+        cycle.regenerateCount = 0;
+      }
+
+      if (optionKey === "regenerate" && cycle.regenerateCount >= 2) {
+        return {
+          ok: false,
+          error: "Regenerate limit reached",
+          postId,
+          confirmed: true,
+          regenerateCount: cycle.regenerateCount,
+          regeneratesRemaining: 0,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
       }
 
       const effectiveCost = areCoinBlocksDisabled() ? 0 : cost;
@@ -980,7 +1187,10 @@ app.post("/api/phase4/option", async (req, res) => {
           ok: false,
           error: "Insufficient coins",
           coins: user.coins,
+          coinsRemaining: user.coins,
           cost: effectiveCost,
+          confirmed: true,
+          postId,
         };
       }
 
@@ -989,9 +1199,14 @@ app.post("/api/phase4/option", async (req, res) => {
       return {
         ok: true,
         optionKey,
+        postId,
+        sourcePostId: postId,
         cost: effectiveCost,
         debitedFor: optionKey,
         coinsLeft: user.coins,
+        coinsRemaining: user.coins,
+        confirmed: true,
+        __cookieState: { user, cycle },
       };
     });
 
@@ -999,24 +1214,81 @@ app.post("/api/phase4/option", async (req, res) => {
       return res.status(400).json(result);
     }
 
+    const cookieState = result.__cookieState || {};
+    const activeUser = cookieState.user || null;
+    const activeCycle = cookieState.cycle || null;
+    delete result.__cookieState;
+
+    function sendOptionResponse(payload) {
+      setUserCookie(res, userId);
+      writeStateCookie(res, userId, activeUser, activeCycle);
+      return res.json(payload);
+    }
+
     if (optionKey === "tone") {
       const rewritten = await rewritePost({ post, tone, mode: "tone" });
-      await withStore((store) => {
-        const cycle = getCycle(store, userId);
-        if (cycle) cycle.optionVariantCount = (cycle.optionVariantCount || 0) + 1;
-      });
-      setUserCookie(res, userId);
-      return res.json({ ...result, post: rewritten });
+      const variantPostId = appendOptionVariant(activeCycle, {
+        postText: rewritten,
+        sourcePostId: result.sourcePostId,
+        optionKey,
+      }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
+      if (activeCycle) {
+        setCycleActionResult(activeCycle, actionId, {
+          ...result,
+          postId: variantPostId,
+          post: rewritten,
+        });
+      }
+      return sendOptionResponse({ ...result, postId: variantPostId, post: rewritten });
     }
 
     if (optionKey === "rephrase") {
       const rewritten = await rewritePost({ post, mode: "rephrase" });
-      await withStore((store) => {
-        const cycle = getCycle(store, userId);
-        if (cycle) cycle.optionVariantCount = (cycle.optionVariantCount || 0) + 1;
+      const variantPostId = appendOptionVariant(activeCycle, {
+        postText: rewritten,
+        sourcePostId: result.sourcePostId,
+        optionKey,
+      }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
+      if (activeCycle) {
+        setCycleActionResult(activeCycle, actionId, {
+          ...result,
+          postId: variantPostId,
+          post: rewritten,
+        });
+      }
+      return sendOptionResponse({ ...result, postId: variantPostId, post: rewritten });
+    }
+
+    if (optionKey === "regenerate") {
+      const rewritten = await rewritePost({ post, mode: "regenerate" });
+      if (activeCycle) {
+        if (typeof activeCycle.regenerateCount !== "number") {
+          activeCycle.regenerateCount = 0;
+        }
+        activeCycle.regenerateCount += 1;
+      }
+      const variantPostId = appendOptionVariant(activeCycle, {
+        postText: rewritten,
+        sourcePostId: result.sourcePostId,
+        optionKey,
+      }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
+      const regenerateCount = Number(activeCycle?.regenerateCount || 1);
+      if (activeCycle) {
+        setCycleActionResult(activeCycle, actionId, {
+          ...result,
+          postId: variantPostId,
+          regenerateCount,
+          regeneratesRemaining: Math.max(0, 2 - regenerateCount),
+          post: rewritten,
+        });
+      }
+      return sendOptionResponse({
+        ...result,
+        postId: variantPostId,
+        regenerateCount,
+        regeneratesRemaining: Math.max(0, 2 - regenerateCount),
+        post: rewritten,
       });
-      setUserCookie(res, userId);
-      return res.json({ ...result, post: rewritten });
     }
 
     if (optionKey === "language") {
@@ -1025,25 +1297,36 @@ app.post("/api/phase4/option", async (req, res) => {
         mode: "language",
         targetLanguage: normalizeOutputLanguage(targetLanguageRaw, "en"),
       });
-      await withStore((store) => {
-        const cycle = getCycle(store, userId);
-        if (cycle) cycle.optionVariantCount = (cycle.optionVariantCount || 0) + 1;
-      });
-      setUserCookie(res, userId);
-      return res.json({ ...result, post: rewritten });
+      const variantPostId = appendOptionVariant(activeCycle, {
+        postText: rewritten,
+        sourcePostId: result.sourcePostId,
+        optionKey,
+      }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
+      if (activeCycle) {
+        setCycleActionResult(activeCycle, actionId, {
+          ...result,
+          postId: variantPostId,
+          post: rewritten,
+        });
+      }
+      return sendOptionResponse({ ...result, postId: variantPostId, post: rewritten });
     }
 
     if (optionKey === "hashtags") {
       const tags = await generateHashtags(post || "");
-      setUserCookie(res, userId);
-      return res.json({ ...result, hashtags: tags });
+      if (activeCycle) {
+        setCycleActionResult(activeCycle, actionId, { ...result, hashtags: tags });
+      }
+      return sendOptionResponse({ ...result, hashtags: tags });
     }
 
-    setUserCookie(res, userId);
-    res.json(result);
+    if (activeCycle) {
+      setCycleActionResult(activeCycle, actionId, result);
+    }
+    sendOptionResponse(result);
   } catch (err) {
     console.error("Phase4 option error:", err);
-    res.status(500).json({ error: "Option failed" });
+    res.status(500).json({ ok: false, error: "Option failed" });
   }
 });
 
@@ -1219,29 +1502,64 @@ app.post("/api/generate", async (req, res) => {
     const keywords = payload.keywords;
     const outputLanguageRaw =
       payload.outputLanguage ?? payload.language ?? payload.targetLanguage;
+    const actionId = normalizeActionId(payload.actionId);
 
     const userId = resolveUserId(req, payload.userId);
     if (!userId) {
-      return res.status(403).json({ error: "Cycle not started" });
+      return res.status(403).json({ ok: false, error: "Cycle not started" });
     }
 
     const generationAccess = await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
-      const cycle = getCycle(store, userId);
+      let cycle = getCycle(store, userId);
+
+      if (!cycle) {
+        const daySlotUsed = isDaySlotUsed(user);
+        const costToStart = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
+        if (costToStart > 0 && user.coins < costToStart) {
+          return {
+            ok: false,
+            error: "Insufficient coins",
+            coins: user.coins,
+            coinsRemaining: user.coins,
+            coinsLeft: user.coins,
+            cost: costToStart,
+            confirmed: false,
+          };
+        }
+        if (costToStart > 0) {
+          user.coins -= costToStart;
+        }
+
+        const postNumber = user.postCountToday + 1;
+        store.cycles[userId] = createCycle(userId, postNumber);
+        cycle = getCycle(store, userId);
+        if (cycle) {
+          cycle.startCostCharged = costToStart;
+        }
+      }
+
       if (!cycle) {
         return {
           ok: false,
           statusCode: 403,
           error: "Cycle not started",
+          confirmed: false,
+          coinsRemaining: user.coins,
         };
       }
 
-      if (cycle.confirmed) {
-        return {
-          ok: false,
-          statusCode: 403,
-          error: "Post already confirmed",
-        };
+      if (actionId) {
+        const cached = ensureCycleActionResults(cycle)[actionId];
+        if (cached && cached.ok) {
+          const cachedPayload = { ...cached };
+          delete cachedPayload._ts;
+          return {
+            ok: true,
+            replayResponse: cachedPayload,
+            __cookieState: { user, cycle },
+          };
+        }
       }
 
       const primaryLanguage = normalizeOutputLanguage(user.primary_language, "en");
@@ -1249,7 +1567,25 @@ app.post("/api/generate", async (req, res) => {
       const resolvedOutputLanguage =
         requestedLanguage === "auto" ? primaryLanguage : requestedLanguage;
 
-      const generationCost = cycle.generationIndex > 0 ? 1 : 0;
+      if (typeof cycle.regenerateCount !== "number") {
+        cycle.regenerateCount = 0;
+      }
+
+      const isRegenerateAttempt = cycle.generationIndex >= 1;
+      if (isRegenerateAttempt && cycle.regenerateCount >= 2) {
+        return {
+          ok: false,
+          error: "Regenerate limit reached",
+          confirmed: Boolean(cycle.confirmed),
+          postId: cycle.confirmedPostId || null,
+          regenerateCount: cycle.regenerateCount,
+          regeneratesRemaining: 0,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      const generationCost = 0;
       const languageCost = resolvedOutputLanguage === primaryLanguage ? 0 : 3;
       const totalCost = generationCost + languageCost;
       if (totalCost > 0 && user.coins < totalCost) {
@@ -1257,9 +1593,11 @@ app.post("/api/generate", async (req, res) => {
           ok: false,
           error: "Insufficient coins",
           coins: user.coins,
+          coinsRemaining: user.coins,
           cost: totalCost,
           primaryLanguage,
           requestedLanguage: resolvedOutputLanguage,
+          confirmed: Boolean(cycle.confirmed),
         };
       }
 
@@ -1271,12 +1609,19 @@ app.post("/api/generate", async (req, res) => {
         cycle.generatedPosts = [];
       }
 
+      if (!Array.isArray(cycle.generatedItems)) {
+        cycle.generatedItems = [];
+      }
+
       const priorVariants = cycle.generatedPosts
         .filter((item) => typeof item === "string" && item.trim().length > 0)
         .slice(-8);
 
       cycle.generationIndex += 1;
       cycle.variantCount += 1;
+      if (isRegenerateAttempt) {
+        cycle.regenerateCount += 1;
+      }
 
       return {
         ok: true,
@@ -1287,8 +1632,11 @@ app.post("/api/generate", async (req, res) => {
         primaryLanguage,
         resolvedOutputLanguage,
         generationIndex: cycle.generationIndex,
+        regenerateCount: cycle.regenerateCount,
+        regeneratesRemaining: Math.max(0, 2 - cycle.regenerateCount),
         priorVariants,
         postNumber: cycle.postNumber,
+        confirmed: Boolean(cycle.confirmed),
         __cookieState: { user, cycle },
       };
     });
@@ -1297,6 +1645,18 @@ app.post("/api/generate", async (req, res) => {
       return res
         .status(generationAccess.statusCode || 400)
         .json(generationAccess);
+    }
+
+    if (generationAccess.replayResponse) {
+      const replay = generationAccess.replayResponse;
+      setUserCookie(res, userId);
+      writeStateCookie(
+        res,
+        userId,
+        generationAccess.__cookieState?.user,
+        generationAccess.__cookieState?.cycle
+      );
+      return res.json({ ...replay, idempotentReplay: true });
     }
 
     const result = await generatePost({
@@ -1311,13 +1671,36 @@ app.post("/api/generate", async (req, res) => {
       priorVariants: generationAccess.priorVariants,
     });
 
-    if (
-      generationAccess.__cookieState?.cycle &&
-      Array.isArray(generationAccess.__cookieState.cycle.generatedPosts)
-    ) {
-      generationAccess.__cookieState.cycle.generatedPosts.push(result.post);
-      generationAccess.__cookieState.cycle.generatedPosts =
-        generationAccess.__cookieState.cycle.generatedPosts.slice(-8);
+    const activeCycle = generationAccess.__cookieState?.cycle;
+    const postId = `${activeCycle?.id || userId}-p${generationAccess.generationIndex}`;
+    if (activeCycle && Array.isArray(activeCycle.generatedPosts)) {
+      activeCycle.generatedPosts.push(result.post);
+    }
+    if (activeCycle && Array.isArray(activeCycle.generatedItems)) {
+      activeCycle.generatedItems.push({
+        id: postId,
+        text: result.post,
+        generationIndex: generationAccess.generationIndex,
+        createdAt: Date.now(),
+      });
+    }
+
+    const responsePayload = {
+      ok: true,
+      ...result,
+      postId,
+      confirmed: generationAccess.confirmed,
+      cost: generationAccess.cost,
+      coinsLeft: generationAccess.coinsLeft,
+      coinsRemaining: generationAccess.coinsLeft,
+      primaryLanguage: generationAccess.primaryLanguage,
+      outputLanguage: generationAccess.resolvedOutputLanguage,
+      regenerateCount: generationAccess.regenerateCount,
+      regeneratesRemaining: generationAccess.regeneratesRemaining,
+    };
+
+    if (activeCycle && actionId) {
+      setCycleActionResult(activeCycle, actionId, responsePayload);
     }
 
     setUserCookie(res, userId);
@@ -1327,16 +1710,10 @@ app.post("/api/generate", async (req, res) => {
       generationAccess.__cookieState?.user,
       generationAccess.__cookieState?.cycle
     );
-    res.json({
-      ...result,
-      cost: generationAccess.cost,
-      coinsLeft: generationAccess.coinsLeft,
-      primaryLanguage: generationAccess.primaryLanguage,
-      outputLanguage: generationAccess.resolvedOutputLanguage,
-    });
+    res.json(responsePayload);
   } catch (err) {
     console.error("API error:", err);
-    res.status(500).json({ error: "Generatie mislukt" });
+    res.status(500).json({ ok: false, error: "Generatie mislukt" });
   }
 });
 
@@ -1344,8 +1721,12 @@ app.post("/api/phase4/confirm", async (req, res) => {
   try {
     const payload = req.body || {};
     const userId = resolveUserId(req, payload.userId);
+    const postId = String(payload.postId || "").trim();
     if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
+      return res.status(400).json({ ok: false, error: "Missing userId" });
+    }
+    if (!postId) {
+      return res.status(400).json({ ok: false, error: "Missing postId" });
     }
 
     const result = await withStore((store) => {
@@ -1365,14 +1746,47 @@ app.post("/api/phase4/confirm", async (req, res) => {
       }
 
       if (cycle.confirmed) {
+        if (cycle.confirmedPostId && cycle.confirmedPostId !== postId) {
+          return {
+            ok: false,
+            statusCode: 409,
+            error: "Post already confirmed",
+            confirmed: true,
+            postId: cycle.confirmedPostId,
+            confirmedPostId: cycle.confirmedPostId,
+            coinsRemaining: user.coins,
+            coinsLeft: user.coins,
+          };
+        }
         return {
           ok: true,
           alreadyConfirmed: true,
+          postId: cycle.confirmedPostId || postId,
+          confirmedPostId: cycle.confirmedPostId || postId,
+          confirmed: true,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      const generatedItems = Array.isArray(cycle.generatedItems)
+        ? cycle.generatedItems
+        : [];
+      const requestedPost = generatedItems.find((entry) => entry?.id === postId);
+      if (!requestedPost) {
+        return {
+          ok: false,
+          statusCode: 400,
+          error: "Unknown postId",
+          confirmed: false,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
         };
       }
 
       const daySlotUsed = isDaySlotUsed(user);
-      const cost = daySlotUsed ? 1 : 0;
+      const startCostCharged = Number(cycle.startCostCharged) || 0;
+      const cost = startCostCharged > 0 ? 0 : (daySlotUsed ? 1 : 0);
 
       if (cost > 0 && user.coins < cost) {
         return {
@@ -1380,8 +1794,11 @@ app.post("/api/phase4/confirm", async (req, res) => {
           statusCode: 400,
           error: "Insufficient coins",
           coins: user.coins,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
           cost,
           daySlotUsed,
+          confirmed: false,
         };
       }
 
@@ -1402,11 +1819,17 @@ app.post("/api/phase4/confirm", async (req, res) => {
 
       cycle.confirmed = true;
       cycle.confirmedAt = Date.now();
+      cycle.confirmedPostId = postId;
+      cycle.confirmedWasFree = cost === 0;
 
       return {
         ok: true,
+        postId,
+        confirmedPostId: postId,
+        confirmed: true,
         postCountToday: user.postCountToday,
         coinsLeft: user.coins,
+        coinsRemaining: user.coins,
         cost,
         daySlotUsed,
         __cookieState: { user, cycle },
@@ -1423,7 +1846,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error("Phase4 confirm error:", err);
-    res.status(500).json({ error: "Confirm failed" });
+    res.status(500).json({ ok: false, error: "Confirm failed" });
   }
 });
 
@@ -1431,59 +1854,131 @@ app.post("/api/phase4/download-variant", async (req, res) => {
   try {
     const payload = req.body || {};
     const userId = resolveUserId(req, payload.userId);
-    const { isOfficial } = payload;
+    const requestedPostId = String(payload.postId || "").trim();
+    const actionId = normalizeActionId(payload.actionId);
     if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
+      return res.status(400).json({ ok: false, error: "Missing userId" });
     }
 
     const cycleCheck = await withStore((store) => {
-      ensureUser(store, userId);
+      const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
-      return Boolean(cycle && cycle.confirmed);
-    });
-    if (!cycleCheck) {
-      return res.status(400).json({ error: "No confirmed post" });
-    }
-
-    const cost = isOfficial ? 0 : 1;
-    if (cost === 0) {
-      setUserCookie(res, userId);
-      return res.json({ ok: true, cost: 0 });
-    }
-
-    const result = await withStore((store) => {
-      const user = ensureUser(store, userId);
-      if (user.coins < cost) {
+      if (!cycle || !cycle.confirmed) {
         return {
           ok: false,
-          error: "Insufficient coins",
-          coins: user.coins,
+          error: "No confirmed post",
+          confirmed: false,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
         };
       }
 
-      user.coins -= cost;
-      return { ok: true, cost, coinsLeft: user.coins };
+      if (actionId) {
+        const cached = ensureCycleActionResults(cycle)[actionId];
+        if (cached && cached.ok) {
+          const cachedPayload = { ...cached };
+          delete cachedPayload._ts;
+          return {
+            ...cachedPayload,
+            idempotentReplay: true,
+            __cookieState: { user, cycle },
+          };
+        }
+      }
+
+      const generatedItems = Array.isArray(cycle.generatedItems)
+        ? cycle.generatedItems
+        : [];
+      const postId = requestedPostId || String(cycle.confirmedPostId || "");
+      if (!postId) {
+        return {
+          ok: false,
+          error: "Missing postId",
+          confirmed: true,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      const knownPost =
+        postId === String(cycle.confirmedPostId || "")
+        || generatedItems.some((entry) => String(entry?.id || "") === postId);
+      if (!knownPost) {
+        return {
+          ok: false,
+          error: "Unknown postId",
+          confirmed: true,
+          postId,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      const isOfficial = cycle.confirmedPostId === postId;
+      const freeWindowActive = Boolean(cycle.confirmedWasFree && isDaySlotUsed(user));
+      const cost = isOfficial && freeWindowActive ? 0 : 1;
+
+      if (cost > 0 && user.coins < cost) {
+        return {
+          ok: false,
+          error: "Insufficient coins",
+          confirmed: true,
+          postId,
+          coins: user.coins,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+          cost,
+        };
+      }
+
+      if (cost > 0) {
+        user.coins -= cost;
+      }
+
+      const responsePayload = {
+        ok: true,
+        postId,
+        confirmed: true,
+        cost,
+        freeWindowActive,
+        isOfficial,
+        coinsLeft: user.coins,
+        coinsRemaining: user.coins,
+      };
+
+      setCycleActionResult(cycle, actionId, responsePayload);
+      return {
+        ...responsePayload,
+        __cookieState: { user, cycle },
+      };
     });
 
-    if (!result.ok) {
-      return res.status(400).json(result);
+    if (!cycleCheck.ok) {
+      return res.status(400).json(cycleCheck);
     }
 
     setUserCookie(res, userId);
-    res.json(result);
+    writeStateCookie(res, userId, cycleCheck.__cookieState?.user, cycleCheck.__cookieState?.cycle);
+    delete cycleCheck.__cookieState;
+    res.json(cycleCheck);
   } catch (err) {
     console.error("Phase4 download variant error:", err);
-    res.status(500).json({ error: "Download failed" });
+    res.status(500).json({ ok: false, error: "Download failed" });
   }
 });
 
-const isDirectRun =
-  process.argv[1] && path.resolve(process.argv[1]) === __filename;
-
-if (isDirectRun) {
-  app.listen(PORT, () => {
-    console.log(`API running on http://localhost:${PORT}`);
+// Debug catch-all - moet als laatste
+app.use("*", (req, res) => {
+  res.status(404).json({
+    error: "Route not found",
+    debug: {
+      method: req.method,
+      url: req.url,
+      baseUrl: req.baseUrl,
+      originalUrl: req.originalUrl,
+      path: req.path
+    }
   });
-}
+});
 
 export default app;
