@@ -2058,3 +2058,14 @@ export default app;
 
 
 void _reconcilePendingPaymentsForUser;
+
+
+const __entryFile = process.argv?.[1] ?? "";
+const __isDirectRun = __entryFile !== "" && import.meta.url.endsWith(__entryFile);
+
+if (__isDirectRun) {
+  const port = Number(process.env.PORT ?? 3001);
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`API listening on http://0.0.0.0:${port}`);
+  });
+}
