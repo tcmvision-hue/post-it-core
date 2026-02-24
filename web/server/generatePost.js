@@ -87,7 +87,6 @@ async function generateCandidate({
   postNumber,
   generationIndex,
   languageGuide,
-  detectedInputLanguage,
   strictLanguageRule,
   effectiveOutputLanguage,
   priorVariants,

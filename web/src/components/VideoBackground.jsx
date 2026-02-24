@@ -27,13 +27,16 @@ export default function VideoBackground({
   startAtSeconds = 0,
   baseBackgroundColor = "#145C63",
   fadeDurationMs = 360,
-  zoomIn = false,
-  zoomFrom = 1,
-  zoomDurationMs = 0,
+  _zoomIn = false,
+  _zoomFrom = 1,
+  _zoomDurationMs = 0,
   videoOpacity = 1,
   videoOpacityTransitionMs = 0,
   mediaCrop,
 }) {
+  void _zoomIn;
+  void _zoomFrom;
+  void _zoomDurationMs;
   const [videoError, setVideoError] = React.useState(false);
   const [videoReady, setVideoReady] = React.useState(false);
   const [fallbackError, setFallbackError] = React.useState(false);

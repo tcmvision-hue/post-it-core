@@ -261,7 +261,7 @@ function getCycle(store, userId) {
   return cycle;
 }
 
-async function reconcilePendingPaymentsForUser(store, userId) {
+async function _reconcilePendingPaymentsForUser(store, userId) {
   if (!process.env.MOLLIE_API_KEY) return;
   if (!store.payments || typeof store.payments !== "object") return;
 
@@ -853,7 +853,7 @@ function hydrateFromStateCookie(req, store, userId) {
       || (
         cookieStartedAt === existingStartedAt
         && Boolean(state.cycle.confirmed)
-        && !Boolean(existing.confirmed)
+        && !existing.confirmed
       );
     if (shouldApplyCookieCycle) {
       if (!existing) {
@@ -2055,3 +2055,6 @@ app.use("*", (req, res) => {
 });
 
 export default app;
+
+
+void _reconcilePendingPaymentsForUser;

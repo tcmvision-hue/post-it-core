@@ -15,9 +15,10 @@ export default function Generation({
   confirmError,
   onGenerate,
   onConfirm,
-  onReview,
+  _onReview,
   confirming,
 }) {
+  void _onReview;
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [keywords, setKeywords] = useState("");

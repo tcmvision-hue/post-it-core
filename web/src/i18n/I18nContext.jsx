@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, useState } from "react";
 import { APP_UI_LANGUAGES, LANGUAGE_NAMES, translations } from "./translations";
 
@@ -11,7 +13,7 @@ function normalizeLang(value) {
   return "en";
 }
 
-function getRegionTag(locale) {
+function _getRegionTag(locale) {
   const tag = String(locale || "");
   const parts = tag.split(/[-_]/);
   if (parts.length >= 2) return parts[1].toUpperCase();

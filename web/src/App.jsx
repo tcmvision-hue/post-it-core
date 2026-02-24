@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getUser, syncPendingPaymentFromUrl, syncUserFromUrl } from "./utils/user";
 import { apiFetch } from "./utils/api";
 import { useI18n } from "./i18n/I18nContext";
-import { APP_UI_LANGUAGES, translations } from "./i18n/translations";
+import { APP_UI_LANGUAGES } from "./i18n/translations";
 
 /* UI – HOME */
 import Welcome from "./ui/home/Welcome";
@@ -182,15 +182,7 @@ function primeTodayVideoStartFrame() {
 }
 
 export default function App() {
-  const {
-    lang,
-    setLang,
-    shouldPromptLanguage,
-    detectedLocalLang,
-    confirmLanguageChoice,
-    getLanguageName,
-    t,
-  } = useI18n();
+  const { lang, setLang, shouldPromptLanguage, detectedLocalLang, confirmLanguageChoice, t } = useI18n();
   const isDownloadRoute =
     typeof window !== "undefined" &&
     window.location.pathname.replace(/\/+$/, "") === "/download";
