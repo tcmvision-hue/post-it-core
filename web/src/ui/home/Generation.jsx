@@ -66,7 +66,7 @@ export default function Generation({
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.ok && data?.post && data?.postId) {
-        onGenerate({
+        const generatedPost = {
           text: data.post,
           postId: data.postId,
           confirmed: Boolean(data.confirmed),
@@ -74,7 +74,13 @@ export default function Generation({
           label: keywords.trim(),
           accent: keywords.trim(),
           kind: generationCount === 0 ? "official" : "generation",
-        });
+        };
+
+        onGenerate(generatedPost);
+
+        if (generationCount + 1 >= 3) {
+          onConfirm(generatedPost);
+        }
       } else {
         setError(data?.error || t("generation.error"));
       }
@@ -164,15 +170,6 @@ export default function Generation({
               </button>
             )}
 
-            {currentPost && generationCount === 3 && (
-              <button
-                style={styles.button(loading || confirming)}
-                onClick={onReview}
-                disabled={loading || confirming}
-              >
-                {t("generation.select")}
-              </button>
-            )}
           </div>
         </div>
       </div>

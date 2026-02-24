@@ -33,3 +33,15 @@ Elke volgende stap vereist:
 ---
 
 *Einde README — POST THIS Fase 1*
+
+---
+
+## Canon production smoke test
+Gebruik één script (geen lange copy-paste blokken):
+
+```bash
+cd web
+bash scripts/canon-smoke-prod.sh https://post-it-core.vercel.app
+```
+
+Verwachte output: `PASS1` t/m `PASS5` en daarna `[canon] ALL PASS`.

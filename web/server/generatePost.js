@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 import {
   detectLanguageFromText,
+  isLikelyLanguage,
   languageInstruction,
   normalizeOutputLanguage,
 } from "./languageUtils.js";
@@ -16,6 +17,7 @@ let openaiClient = null;
 
 const SIMILARITY_THRESHOLD = 0.72;
 const MAX_SIMILARITY_ATTEMPTS = 3;
+const MAX_LANGUAGE_CORRECTION_ATTEMPTS = 2;
 
 function getOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -123,7 +125,6 @@ Post nummer vandaag: ${postNumber}
 Generation index binnen cyclus: ${generationIndex}
 Variant-richting: ${variantGuide}
 Taalinstructie: ${languageGuide}
-Auto detect inputtaal: ${detectedInputLanguage || "onbekend"}
 ${strictLanguageRule ? `Taalregel: ${strictLanguageRule}` : ""}
 ${attemptInstruction}
 ${priorVariantsBlock}
@@ -168,6 +169,37 @@ Eisen:
   return post;
 }
 
+async function enforceOutputLanguage({ client, post, outputLanguage }) {
+  const normalized = normalizeOutputLanguage(outputLanguage, "en");
+  let corrected = String(post || "").trim();
+  if (!corrected) return corrected;
+
+  for (let attempt = 0; attempt < MAX_LANGUAGE_CORRECTION_ATTEMPTS; attempt += 1) {
+    if (isLikelyLanguage(corrected, normalized)) {
+      return corrected;
+    }
+
+    const retry = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.1,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Je corrigeert exact één zakelijke social media post naar de gevraagde taal. Behoud de betekenis. Geen uitleg, geen vragen, geen emojis, geen hashtags, geen CTA.",
+        },
+        {
+          role: "user",
+          content: `Corrigeer deze post nu strikt naar deze taal: ${languageInstruction(normalized)}\n\nHarde regel: geef alleen de posttekst terug in exact die taal, zonder gemixte taal.\n\nOutput:\n${corrected}`,
+        },
+      ],
+    });
+    corrected = retry.choices[0]?.message?.content?.trim() || corrected;
+  }
+
+  return corrected;
+}
+
 export async function generatePost({
   kladblok,
   doelgroep,
@@ -181,15 +213,13 @@ export async function generatePost({
 }) {
   const client = getOpenAIClient();
 
-  const requestedOutputLanguage = normalizeOutputLanguage(outputLanguage, "auto");
+  const requestedOutputLanguage = normalizeOutputLanguage(outputLanguage, "en");
   const detectedInputLanguage = detectLanguageFromText(kladblok);
   const effectiveOutputLanguage = requestedOutputLanguage === "auto"
-    ? (detectedInputLanguage || "auto")
+    ? "en"
     : requestedOutputLanguage;
 
-  const languageGuide = requestedOutputLanguage === "auto" && detectedInputLanguage
-    ? `${languageInstruction(detectedInputLanguage)} (auto bepaald op basis van kladblok)`
-    : languageInstruction(effectiveOutputLanguage);
+  const languageGuide = languageInstruction(effectiveOutputLanguage);
 
   const strictLanguageRule = {
     auto: "",
@@ -244,6 +274,12 @@ export async function generatePost({
       break;
     }
   }
+
+  post = await enforceOutputLanguage({
+    client,
+    post,
+    outputLanguage: effectiveOutputLanguage,
+  });
 
   return {
     post,

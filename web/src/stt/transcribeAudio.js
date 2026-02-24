@@ -5,7 +5,10 @@ export async function transcribeAudio(audioBlob, language = "nl") {
   try {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'audio.webm');
-    formData.append('language', language);
+    const normalizedLanguage = String(language || "").trim().toLowerCase();
+    if (normalizedLanguage && normalizedLanguage !== "auto") {
+      formData.append('language', normalizedLanguage);
+    }
     const response = await apiFetch('/api/transcribe', {
       method: 'POST',
       body: formData,

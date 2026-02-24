@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getUser, syncPendingPaymentFromUrl, syncUserFromUrl } from "./utils/user";
 import { apiFetch } from "./utils/api";
 import { useI18n } from "./i18n/I18nContext";
-import { translations } from "./i18n/translations";
+import { APP_UI_LANGUAGES, translations } from "./i18n/translations";
 
 /* UI – HOME */
 import Welcome from "./ui/home/Welcome";
@@ -40,6 +40,37 @@ const PHASES = {
 
 const INTAKE_KEY = "post_it_intake";
 const INTAKE_PERSIST_KEY = "post_it_intake_persist";
+const OUTPUT_LANGUAGE_KEY = "post_this_output_language";
+const START_OUTPUT_LANGUAGES = [
+  "nl", "en", "pl", "es", "fr", "de", "pt", "it", "ar", "zh", "ja", "he", "af", "sw", "am", "ha", "yo", "zu", "srn-nl", "straat-nl",
+];
+
+function normalizeStartupOutputLanguage(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "nl";
+  return START_OUTPUT_LANGUAGES.includes(raw) ? raw : "nl";
+}
+
+function loadStoredOutputLanguage() {
+  if (typeof window === "undefined") return "nl";
+  try {
+    return normalizeStartupOutputLanguage(window.localStorage.getItem(OUTPUT_LANGUAGE_KEY));
+  } catch {
+    return "nl";
+  }
+}
+
+function storeOutputLanguage(nextLanguage) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      OUTPUT_LANGUAGE_KEY,
+      normalizeStartupOutputLanguage(nextLanguage)
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function loadStoredIntake() {
   if (typeof window === "undefined") return null;
@@ -164,6 +195,7 @@ export default function App() {
     typeof window !== "undefined" &&
     window.location.pathname.replace(/\/+$/, "") === "/download";
   const [phase, setPhase] = useState(getReturnPhase);
+  const [outputLanguage, setOutputLanguage] = useState(loadStoredOutputLanguage);
 
   const [intake, setIntake] = useState(() => loadStoredIntake());
   const [generations, setGenerations] = useState([]);
@@ -211,10 +243,8 @@ export default function App() {
     const user = getUser();
     const payload = {
       profileId: user.id,
+      language: outputLanguage,
     };
-    if (!shouldPromptLanguage) {
-      payload.language = lang;
-    }
 
     apiFetch("/api/profile/bootstrap", {
       method: "POST",
@@ -226,11 +256,16 @@ export default function App() {
         if (cancelled || !response.ok || !data?.ok || !data?.profile) return;
         const serverLanguage = String(data.profile.primary_language || "").trim();
         if (!serverLanguage) return;
-        if (serverLanguage !== lang) {
-          setLang(serverLanguage);
+        const normalizedServerLanguage = normalizeStartupOutputLanguage(serverLanguage);
+        if (normalizedServerLanguage !== outputLanguage) {
+          setOutputLanguage(normalizedServerLanguage);
+          storeOutputLanguage(normalizedServerLanguage);
         }
         if (shouldPromptLanguage) {
-          confirmLanguageChoice(serverLanguage);
+          const nextUiLanguage = APP_UI_LANGUAGES.includes(normalizedServerLanguage)
+            ? normalizedServerLanguage
+            : (APP_UI_LANGUAGES.includes(lang) ? lang : detectedLocalLang);
+          confirmLanguageChoice(nextUiLanguage || "nl");
         }
       })
       .catch(() => {
@@ -240,7 +275,14 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [lang, setLang, shouldPromptLanguage, confirmLanguageChoice, detectedLocalLang]);
+  }, [
+    lang,
+    outputLanguage,
+    setLang,
+    shouldPromptLanguage,
+    confirmLanguageChoice,
+    detectedLocalLang,
+  ]);
 
   useEffect(() => {
     if (phase === PHASES.EXPLANATION) {
@@ -702,42 +744,45 @@ export default function App() {
               <p style={{ marginTop: 0, marginBottom: 14, lineHeight: 1.4 }}>
                 {t("lang.modal.text")}
               </p>
-              <button
-                style={{
-                  width: "100%",
-                  marginBottom: 8,
-                  border: "1px solid #145C63",
-                  borderRadius: 10,
-                  padding: "10px 12px",
-                  background: "#145C63",
-                  color: "#fff",
-                  cursor: "pointer",
-                }}
-                onClick={() => confirmLanguageChoice(detectedLocalLang)}
-              >
-                {t("lang.modal.local")}: {getLanguageName(detectedLocalLang)}
-              </button>
+              <p style={{ marginTop: 0, marginBottom: 8, fontSize: 13, color: "#145C63" }}>
+                Start outputtaal (alleen te wijzigen via Meer opties → Taal)
+              </p>
 
-              {Object.keys(translations)
-                .filter((code) => code !== detectedLocalLang)
-                .map((code) => (
-                  <button
-                    key={code}
-                    style={{
-                      width: "100%",
-                      border: "1px solid #145C63",
-                      borderRadius: 10,
-                      padding: "10px 12px",
-                      background: "#fff",
-                      color: "#145C63",
-                      cursor: "pointer",
-                      marginTop: 8,
-                    }}
-                    onClick={() => confirmLanguageChoice(code)}
-                  >
-                    {getLanguageName(code)}
-                  </button>
-                ))}
+              <div style={{ maxHeight: 260, overflowY: "auto", display: "grid", gap: 8 }}>
+                {START_OUTPUT_LANGUAGES.map((code) => {
+                  const label = code === "srn-nl"
+                    ? t("generation.lang.srn")
+                    : code === "straat-nl"
+                      ? t("generation.lang.straat")
+                      : t(`generation.lang.${code}`);
+                  const isActive = outputLanguage === code;
+                  return (
+                    <button
+                      key={code}
+                      style={{
+                        width: "100%",
+                        border: "1px solid #145C63",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                        background: isActive ? "#145C63" : "#fff",
+                        color: isActive ? "#fff" : "#145C63",
+                        cursor: "pointer",
+                      }}
+                      onClick={() => {
+                        const normalized = normalizeStartupOutputLanguage(code);
+                        setOutputLanguage(normalized);
+                        storeOutputLanguage(normalized);
+                        const nextUiLanguage = APP_UI_LANGUAGES.includes(normalized)
+                          ? normalized
+                          : (APP_UI_LANGUAGES.includes(lang) ? lang : detectedLocalLang);
+                        confirmLanguageChoice(nextUiLanguage || "nl");
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

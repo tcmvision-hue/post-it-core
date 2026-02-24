@@ -3,7 +3,7 @@ import { transcribeAudio } from "../../stt/transcribeAudio";
 import { useI18n } from "../../i18n/I18nContext";
 
 export default function AudioTranscriber({ onResult, onRecordingChange }) {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -74,7 +74,7 @@ export default function AudioTranscriber({ onResult, onRecordingChange }) {
       setStatus(t("audio.received"));
       setTranscribing(true);
       try {
-        const text = await transcribeAudio(audioBlob, lang);
+        const text = await transcribeAudio(audioBlob, "auto");
         if (typeof text === "string" && text.trim()) {
           onResult(text);
         }
