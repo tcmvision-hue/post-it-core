@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="${1:-https://post-it-core.vercel.app}"
+BASE="${BASE_URL:-${1:-https://post-it-core.vercel.app}}"
 JAR="${2:-/tmp/postit-canon.jar}"
 USER_ID="${3:-canon-$(date +%s)}"
 
@@ -30,6 +30,12 @@ json_post "/api/generate" "$GEN_BODY" "$TMP_DIR/g1.json"
 json_post "/api/generate" "$GEN_BODY" "$TMP_DIR/g2.json"
 json_post "/api/generate" "$GEN_BODY" "$TMP_DIR/g3.json"
 json_post "/api/generate" "$GEN_BODY" "$TMP_DIR/g4.json"
+
+if ! grep -q '"ok"' "$TMP_DIR/g3.json"; then
+  echo "[canon] FAIL - non-JSON or invalid response in g3.json"
+  cat "$TMP_DIR/g3.json"
+  exit 1
+fi
 
 POST_ID=$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(String(d.postId||''));" "$TMP_DIR/g3.json")
 
