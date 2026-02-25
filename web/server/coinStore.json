@@ -1,0 +1,1093 @@
+{
+  "users": {
+    "u-khhn2gcjq9l-mlfox9n4": {
+      "coins": 454,
+      "day": "2026-02-10",
+      "postCountToday": 4
+    },
+    "u-xhjtwreco4i-mlgoxt30": {
+      "coins": 91,
+      "day": "2026-02-10",
+      "postCountToday": 9
+    },
+    "u-jkhzga1gvir-mlhd45vc": {
+      "coins": 100,
+      "day": "2026-02-11",
+      "postCountToday": 1
+    },
+    "u-1a0cf4p62wa-mlhd55d5": {
+      "coins": 196,
+      "day": "2026-02-11",
+      "postCountToday": 1
+    },
+    "u-1obzwtv0nio-mlhfb5cx": {
+      "coins": 92,
+      "day": "2026-02-11",
+      "postCountToday": 2
+    },
+    "u-xst1hdoveq8-mlhfc376": {
+      "coins": 93,
+      "day": "2026-02-13",
+      "postCountToday": 1
+    },
+    "u-9gcjuvwvne-mlil7pnf": {
+      "coins": 0,
+      "day": "2026-02-11",
+      "postCountToday": 0
+    },
+    "u-7khpemb8vu-mljwsuta": {
+      "coins": 5,
+      "day": "2026-02-13",
+      "postCountToday": 15
+    },
+    "u-b9i1nmatgcl-mlke2aju": {
+      "coins": 99,
+      "day": "2026-02-13",
+      "postCountToday": 2
+    },
+    "u-tt5thevgj4-mlke6l2q": {
+      "coins": 90,
+      "day": "2026-02-13",
+      "postCountToday": 5
+    },
+    "u-gxzfcvatva-mlkg10y4": {
+      "coins": 100,
+      "day": "2026-02-13",
+      "postCountToday": 0
+    },
+    "u-2nqadvozjxl-mlkg1k5f": {
+      "coins": 100,
+      "day": "2026-02-13",
+      "postCountToday": 0
+    },
+    "u-fojdzsa0bq8-mlkhmf8p": {
+      "coins": 89,
+      "day": "2026-02-13",
+      "postCountToday": 2
+    },
+    "1e7cf6e0-257a-4865-8b4e-f031c8b64899": {
+      "coins": 120,
+      "day": "2026-02-13",
+      "postCountToday": 1
+    },
+    "0d1fc012-c127-4b7a-bf28-30407b827dd4": {
+      "coins": 64,
+      "day": "2026-02-14",
+      "postCountToday": 0,
+      "profile_id": "0d1fc012-c127-4b7a-bf28-30407b827dd4",
+      "created_at": "2026-02-14T03:33:33.013Z",
+      "last_free_post_date": null,
+      "primary_language": "nl"
+    },
+    "tester-123": {
+      "profile_id": "tester-123",
+      "primary_language": "en",
+      "coins": 44,
+      "last_free_post_date": "2026-02-19",
+      "created_at": "2026-02-14T06:05:58.176Z",
+      "day": "2026-02-19",
+      "postCountToday": 1,
+      "last_free_post_timestamp": "2026-02-19T22:36:42.236Z"
+    },
+    "b5e2db96-43bd-4337-89b2-7623b3c60219": {
+      "profile_id": "b5e2db96-43bd-4337-89b2-7623b3c60219",
+      "primary_language": "nl",
+      "coins": 99,
+      "last_free_post_date": "2026-02-14",
+      "created_at": "2026-02-14T07:22:30.246Z",
+      "day": "2026-02-14",
+      "postCountToday": 2
+    },
+    "034e1d79-c581-411a-97bd-cfe9b2aef608": {
+      "profile_id": "034e1d79-c581-411a-97bd-cfe9b2aef608",
+      "primary_language": "nl",
+      "coins": 19,
+      "last_free_post_date": "2026-02-14",
+      "created_at": "2026-02-14T07:25:18.326Z",
+      "day": "2026-02-14",
+      "postCountToday": 2
+    },
+    "cebbd4dd-22a2-4ae1-8988-61042f8c7534": {
+      "profile_id": "cebbd4dd-22a2-4ae1-8988-61042f8c7534",
+      "primary_language": "nl",
+      "coins": 20,
+      "last_free_post_date": "2026-02-14",
+      "created_at": "2026-02-14T07:36:13.736Z",
+      "day": "2026-02-14",
+      "postCountToday": 1
+    },
+    "30b17169-0bd3-4d6d-9ad3-e8fea23bf633": {
+      "profile_id": "30b17169-0bd3-4d6d-9ad3-e8fea23bf633",
+      "primary_language": "nl",
+      "coins": 19,
+      "last_free_post_date": "2026-02-14",
+      "created_at": "2026-02-14T07:40:08.777Z",
+      "day": "2026-02-14",
+      "postCountToday": 2
+    },
+    "test-user": {
+      "profile_id": "test-user",
+      "primary_language": "en",
+      "coins": 20,
+      "last_free_post_date": null,
+      "created_at": "2026-02-14T15:40:04.038Z",
+      "day": "2026-02-25",
+      "postCountToday": 0,
+      "last_free_post_timestamp": null,
+      "last_free_download_timestamp": null
+    },
+    "e42ba97a-1678-4402-9f10-0f96cd20d90a": {
+      "profile_id": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "primary_language": "en",
+      "coins": 0,
+      "last_free_post_date": null,
+      "created_at": "2026-02-14T23:26:09.443Z",
+      "day": "2026-02-15",
+      "postCountToday": 0
+    },
+    "2004ae3f-a624-48cd-99e7-7afa6664edca": {
+      "profile_id": "2004ae3f-a624-48cd-99e7-7afa6664edca",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": "2026-02-15",
+      "created_at": "2026-02-14T23:59:34.639Z",
+      "day": "2026-02-15",
+      "postCountToday": 1
+    },
+    "c023cd1c-9f42-4bdb-8db3-89629c86e333": {
+      "profile_id": "c023cd1c-9f42-4bdb-8db3-89629c86e333",
+      "primary_language": "en",
+      "coins": 0,
+      "last_free_post_date": null,
+      "created_at": "2026-02-15T00:03:08.033Z",
+      "day": "2026-02-15",
+      "postCountToday": 0
+    },
+    "debug-user-1": {
+      "profile_id": "debug-user-1",
+      "primary_language": "en",
+      "coins": 0,
+      "last_free_post_date": null,
+      "created_at": "2026-02-15T03:48:09.583Z",
+      "day": "2026-02-15",
+      "postCountToday": 0
+    },
+    "ff9f5103-8529-45f0-bde4-75d49b0cf309": {
+      "profile_id": "ff9f5103-8529-45f0-bde4-75d49b0cf309",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": null,
+      "last_free_post_timestamp": null,
+      "created_at": "2026-02-16T07:46:46.027Z",
+      "day": "2026-02-16",
+      "postCountToday": 0
+    },
+    "test": {
+      "profile_id": "test",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": null,
+      "last_free_post_timestamp": null,
+      "created_at": "2026-02-19T22:04:48.005Z",
+      "day": "2026-02-20",
+      "postCountToday": 0
+    },
+    "test-e2e": {
+      "profile_id": "test-e2e",
+      "primary_language": "en",
+      "coins": 1,
+      "last_free_post_date": "2026-02-19",
+      "last_free_post_timestamp": "2026-02-19T22:34:49.168Z",
+      "created_at": "2026-02-19T22:34:45.800Z",
+      "day": "2026-02-19",
+      "postCountToday": 1
+    },
+    "canon-qa-1771627278": {
+      "profile_id": "canon-qa-1771627278",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": "2026-02-20",
+      "last_free_post_timestamp": "2026-02-20T22:41:31.665Z",
+      "last_free_download_timestamp": "2026-02-20T22:41:31.932Z",
+      "created_at": "2026-02-20T22:41:18.993Z",
+      "day": "2026-02-20",
+      "postCountToday": 1
+    },
+    "qa-1771629087": {
+      "profile_id": "qa-1771629087",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": "2026-02-20",
+      "last_free_post_timestamp": "2026-02-20T23:11:39.339Z",
+      "last_free_download_timestamp": null,
+      "created_at": "2026-02-20T23:11:27.563Z",
+      "day": "2026-02-20",
+      "postCountToday": 1
+    },
+    "qa-1771629306": {
+      "profile_id": "qa-1771629306",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": null,
+      "last_free_post_timestamp": null,
+      "last_free_download_timestamp": null,
+      "created_at": "2026-02-20T23:15:06.506Z",
+      "day": "2026-02-20",
+      "postCountToday": 0
+    },
+    "qa-1771629376": {
+      "profile_id": "qa-1771629376",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": null,
+      "last_free_post_timestamp": null,
+      "last_free_download_timestamp": null,
+      "created_at": "2026-02-20T23:16:16.900Z",
+      "day": "2026-02-20",
+      "postCountToday": 0
+    },
+    "qa-1771629601": {
+      "profile_id": "qa-1771629601",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": null,
+      "last_free_post_timestamp": null,
+      "last_free_download_timestamp": null,
+      "created_at": "2026-02-20T23:20:01.790Z",
+      "day": "2026-02-20",
+      "postCountToday": 0
+    },
+    "qa-1771629685": {
+      "profile_id": "qa-1771629685",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": null,
+      "last_free_post_timestamp": null,
+      "last_free_download_timestamp": null,
+      "created_at": "2026-02-20T23:21:53.687Z",
+      "day": "2026-02-20",
+      "postCountToday": 0
+    },
+    "qa-1771629927": {
+      "profile_id": "qa-1771629927",
+      "primary_language": "nl",
+      "coins": 0,
+      "last_free_post_date": "2026-02-20",
+      "last_free_post_timestamp": "2026-02-20T23:25:36.111Z",
+      "last_free_download_timestamp": "2026-02-20T23:25:36.156Z",
+      "created_at": "2026-02-20T23:25:27.763Z",
+      "day": "2026-02-20",
+      "postCountToday": 1
+    },
+    "health-check": {
+      "profile_id": "health-check",
+      "primary_language": "en",
+      "coins": 0,
+      "last_free_post_date": null,
+      "last_free_post_timestamp": null,
+      "last_free_download_timestamp": null,
+      "created_at": "2026-02-21T14:41:01.955Z",
+      "day": "2026-02-21",
+      "postCountToday": 0
+    }
+  },
+  "payments": {
+    "tr_3LaxpAa2hAwgprwBi6wLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_vNC4smMn8nqvjeqUo7wLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 20,
+      "status": "expired",
+      "credited": false
+    },
+    "tr_cceTmVFkrgP3Xpzfr7wLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 50,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_xS7A49mJF6sgcBY6b8wLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_Qqk8hnBifrBHi9XfxAwLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_ZsLJdpLHMgKFNWsSnDwLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_ggntqXinNKx2fwemSEwLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_MbR9evfDSpX4g8zygEwLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 50,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_nakcJ6WzHbCSdcBqrEwLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_nGGtmXv9kEqmg4hKSFwLJ": {
+      "userId": "u-khhn2gcjq9l-mlfox9n4",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_mdxo3FXtKSpHxHXRwfxLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_sASCPwXTJDmhYsmCyfxLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_E3jVTRPc9XNT8SWPWhxLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 50,
+      "status": "open",
+      "credited": false
+    },
+    "tr_2Kvv9dovaZCNq2zXoixLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 50,
+      "status": "open",
+      "credited": false
+    },
+    "tr_rX8oU5hssavesGTKmsxLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_FFsECmo2k9Gqa2ysdtxLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_szeW679GcRZeRkiCxtxLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_iX3uBceZQgYMZ7jn9uxLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_sd2FVzztaFNd7ZH2A8yLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_Y4ksDNcqsY4tkBiAa8yLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 50,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_h2KbBWYyvzoQZ264XAyLJ": {
+      "userId": "u-xhjtwreco4i-mlgoxt30",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_CuDki2U47xMkd2h2JtyLJ": {
+      "userId": "u-jkhzga1gvir-mlhd45vc",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_Ua9VHZqrwefkL64APtyLJ": {
+      "userId": "u-1a0cf4p62wa-mlhd55d5",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_EvXuamBysEaQjG9F2vyLJ": {
+      "userId": "u-1a0cf4p62wa-mlhd55d5",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_qxtS3q7ott59jiTXazyLJ": {
+      "userId": "u-1obzwtv0nio-mlhfb5cx",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_LiiTjQaVsL8ekRerezyLJ": {
+      "userId": "u-xst1hdoveq8-mlhfc376",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_82dsi6LN78vvPr8csd5MJ": {
+      "userId": "u-7khpemb8vu-mljwsuta",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_sHYesGHyaBmEqZNy6z5MJ": {
+      "userId": "u-7khpemb8vu-mljwsuta",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_dw3QkRCdn5CetbmdAP6MJ": {
+      "userId": "u-b9i1nmatgcl-mlke2aju",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_jhALHUxf5hAUVCqWDP6MJ": {
+      "userId": "u-tt5thevgj4-mlke6l2q",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_UxaAQ2mWUUF594hfWU6MJ": {
+      "userId": "u-gxzfcvatva-mlkg10y4",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_fLEjNdgjsCJPngMHYU6MJ": {
+      "userId": "u-2nqadvozjxl-mlkg1k5f",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_FtCXJa8KYTDK34oh5Z6MJ": {
+      "userId": "u-fojdzsa0bq8-mlkhmf8p",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_hD4jdqE2SfQjWrVHXt7MJ": {
+      "userId": "1e7cf6e0-257a-4865-8b4e-f031c8b64899",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_osU9UxZ3Y2QcMJX3Ax7MJ": {
+      "userId": "1e7cf6e0-257a-4865-8b4e-f031c8b64899",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_YGwUKkDzRkyieogjrB8MJ": {
+      "userId": "0d1fc012-c127-4b7a-bf28-30407b827dd4",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_poKeVRZfzjpmprvZJH9MJ": {
+      "userId": "b5e2db96-43bd-4337-89b2-7623b3c60219",
+      "coins": 100,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_eLkwsBDwN8JNju36zH9MJ": {
+      "userId": "034e1d79-c581-411a-97bd-cfe9b2aef608",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_Q2H5oaj7qUSSB3A7dJ9MJ": {
+      "userId": "cebbd4dd-22a2-4ae1-8988-61042f8c7534",
+      "coins": 100,
+      "status": "expired",
+      "credited": false
+    },
+    "tr_UqZuwHKPxcfreyNLhJ9MJ": {
+      "userId": "cebbd4dd-22a2-4ae1-8988-61042f8c7534",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_qGt3ghm29HBaMhmzzJ9MJ": {
+      "userId": "30b17169-0bd3-4d6d-9ad3-e8fea23bf633",
+      "coins": 20,
+      "status": "paid",
+      "credited": true
+    },
+    "tr_Us7bvSyWrhvMMKs4vzAMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_aRJzwksZakmDDncJxzAMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_wbxjkv84wnT8ZYV5o2BMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_mzjpDDEghSaexeztQ3BMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_4ghwPSUtceN88u7MY3BMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_GxkRdBEvX2zdzyTS54BMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 50,
+      "status": "open",
+      "credited": false
+    },
+    "tr_KwhWRm8fMwN3nxszD4BMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_RGJVSajUsA7rsCyGe4BMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_wiRhVzrrZQiVPScFr4BMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_XDnSTHAJmHp5V9AsC5BMJ": {
+      "userId": "e42ba97a-1678-4402-9f10-0f96cd20d90a",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_s7TZZLpt8hTEyNcsY5BMJ": {
+      "userId": "2004ae3f-a624-48cd-99e7-7afa6664edca",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    },
+    "tr_ksNryRjE3VpTA6p4cBBMJ": {
+      "userId": "2004ae3f-a624-48cd-99e7-7afa6664edca",
+      "coins": 100,
+      "status": "open",
+      "credited": false
+    },
+    "tr_5qgstLyhSETZq95jxDBMJ": {
+      "userId": "2004ae3f-a624-48cd-99e7-7afa6664edca",
+      "coins": 100,
+      "status": "open",
+      "credited": false
+    },
+    "tr_xw7Z7zJ9GqsizFNyzDBMJ": {
+      "userId": "2004ae3f-a624-48cd-99e7-7afa6664edca",
+      "coins": 100,
+      "status": "open",
+      "credited": false
+    },
+    "tr_mJJB8GvMD66qUTRszDBMJ": {
+      "userId": "2004ae3f-a624-48cd-99e7-7afa6664edca",
+      "coins": 20,
+      "status": "open",
+      "credited": false
+    }
+  },
+  "cycles": {
+    "2004ae3f-a624-48cd-99e7-7afa6664edca": {
+      "id": "mlmzb75h-o92o0x5msv",
+      "userId": "2004ae3f-a624-48cd-99e7-7afa6664edca",
+      "postNumber": 1,
+      "generationIndex": 0,
+      "variantCount": 0,
+      "optionVariantCount": 0,
+      "day": "2026-02-15",
+      "startedAt": 1771113604085,
+      "confirmed": true,
+      "confirmedAt": 1771113684196
+    },
+    "debug-user-1": {
+      "id": "mln7k6pk-af29g2efask",
+      "userId": "debug-user-1",
+      "postNumber": 1,
+      "generationIndex": 0,
+      "variantCount": 0,
+      "optionVariantCount": 0,
+      "day": "2026-02-15",
+      "startedAt": 1771127460344,
+      "confirmed": false
+    },
+    "test-e2e": {
+      "id": "mlu1gr70-by4rk84n5ka",
+      "userId": "test-e2e",
+      "postNumber": 1,
+      "generationIndex": 1,
+      "variantCount": 1,
+      "optionVariantCount": 2,
+      "generatedPosts": [
+        "Many small and medium-sized enterprises are eager to adopt AI, but implementation often proves challenging. Over the next few weeks, I anticipate that teams will encounter obstacles during this process. To facilitate a smoother transition, here are actionable steps you can take starting tomorrow to effectively integrate AI into your operations.",
+        "Manuele variant voor download paid-path bewijs.",
+        "Zaden vormen de basis voor groei en ontwikkeling. Ze zijn essentieel voor onze toekomst en de biodiversiteit van onze planeet. Laten we investeren in duurzame praktijken die de kracht van zaden benutten.",
+        "Zonder de oorspronkelijke tekst kan ik geen herschrijving maken. Gelieve de tekst aan te leveren die u wilt laten herschrijven."
+      ],
+      "generatedItems": [
+        {
+          "id": "mlu1gr70-by4rk84n5ka-p1",
+          "text": "Many small and medium-sized enterprises are eager to adopt AI, but implementation often proves challenging. Over the next few weeks, I anticipate that teams will encounter obstacles during this process. To facilitate a smoother transition, here are actionable steps you can take starting tomorrow to effectively integrate AI into your operations.",
+          "generationIndex": 1,
+          "createdAt": 1771540489165
+        },
+        {
+          "id": "mlu1gr70-by4rk84n5ka-manual-v1",
+          "text": "Manuele variant voor download paid-path bewijs.",
+          "generationIndex": 2,
+          "createdAt": 1771549999000
+        },
+        {
+          "id": "mlu1gr70-by4rk84n5ka-o1",
+          "text": "Zaden vormen de basis voor groei en ontwikkeling. Ze zijn essentieel voor onze toekomst en de biodiversiteit van onze planeet. Laten we investeren in duurzame praktijken die de kracht van zaden benutten.",
+          "optionKey": "regenerate",
+          "sourcePostId": "mlu1gr70-by4rk84n5ka-p1",
+          "createdAt": 1771540777619
+        },
+        {
+          "id": "mlu1gr70-by4rk84n5ka-o2",
+          "text": "Zonder de oorspronkelijke tekst kan ik geen herschrijving maken. Gelieve de tekst aan te leveren die u wilt laten herschrijven.",
+          "optionKey": "regenerate",
+          "sourcePostId": "mlu1gr70-by4rk84n5ka-p1",
+          "createdAt": 1771540788310
+        }
+      ],
+      "day": "2026-02-19",
+      "startedAt": 1771540485804,
+      "confirmed": true,
+      "confirmedPostId": "mlu1gr70-by4rk84n5ka-p1",
+      "confirmedWasFree": true,
+      "startCostCharged": 0,
+      "actionResults": {
+        "proof-download-official": {
+          "ok": true,
+          "postId": "mlu1gr70-by4rk84n5ka-p1",
+          "confirmed": true,
+          "cost": 0,
+          "freeWindowActive": true,
+          "isOfficial": true,
+          "coinsLeft": 0,
+          "coinsRemaining": 0,
+          "_ts": 1771540489179
+        },
+        "proof-download-official-c": {
+          "ok": true,
+          "postId": "mlu1gr70-by4rk84n5ka-p1",
+          "confirmed": true,
+          "cost": 0,
+          "freeWindowActive": true,
+          "isOfficial": true,
+          "coinsLeft": 2,
+          "coinsRemaining": 2,
+          "_ts": 1771540700714
+        },
+        "proof-download-variant-c": {
+          "ok": true,
+          "postId": "mlu1gr70-by4rk84n5ka-manual-v1",
+          "confirmed": true,
+          "cost": 1,
+          "freeWindowActive": true,
+          "isOfficial": false,
+          "coinsLeft": 1,
+          "coinsRemaining": 1,
+          "_ts": 1771540700716
+        },
+        "proof-download-official-c2": {
+          "ok": true,
+          "postId": "mlu1gr70-by4rk84n5ka-p1",
+          "confirmed": true,
+          "cost": 0,
+          "freeWindowActive": true,
+          "isOfficial": true,
+          "coinsLeft": 3,
+          "coinsRemaining": 3,
+          "_ts": 1771540757610
+        },
+        "probe-single-regen": {
+          "ok": true,
+          "optionKey": "regenerate",
+          "postId": "mlu1gr70-by4rk84n5ka-o1",
+          "sourcePostId": "mlu1gr70-by4rk84n5ka-p1",
+          "cost": 1,
+          "debitedFor": "regenerate",
+          "coinsLeft": 2,
+          "coinsRemaining": 2,
+          "confirmed": true,
+          "post": "Zaden vormen de basis voor groei en ontwikkeling. Ze zijn essentieel voor onze toekomst en de biodiversiteit van onze planeet. Laten we investeren in duurzame praktijken die de kracht van zaden benutten.",
+          "_ts": 1771540777619
+        },
+        "probe-single-regen2": {
+          "ok": true,
+          "optionKey": "regenerate",
+          "postId": "mlu1gr70-by4rk84n5ka-o2",
+          "sourcePostId": "mlu1gr70-by4rk84n5ka-p1",
+          "cost": 1,
+          "debitedFor": "regenerate",
+          "coinsLeft": 1,
+          "coinsRemaining": 1,
+          "confirmed": true,
+          "post": "Zonder de oorspronkelijke tekst kan ik geen herschrijving maken. Gelieve de tekst aan te leveren die u wilt laten herschrijven.",
+          "_ts": 1771540788310
+        }
+      },
+      "confirmedAt": 1771540489168
+    },
+    "tester-123": {
+      "id": "mlu1j6ck-ui4cuh0haoo",
+      "userId": "tester-123",
+      "postNumber": 1,
+      "generationIndex": 2,
+      "variantCount": 2,
+      "optionVariantCount": 1,
+      "generatedPosts": [
+        "Many small and medium-sized enterprises are eager to embrace AI but often find themselves stuck during implementation. Over the next few weeks, I will be observing teams facing these challenges. To help you move forward, here are practical steps you can take starting tomorrow to kickstart your AI adoption journey.",
+        "Kleine en middelgrote bedrijven willen graag AI omarmen, maar lopen vaak tegen obstakels aan bij de uitvoering."
+      ],
+      "generatedItems": [
+        {
+          "id": "mlu1j6ck-ui4cuh0haoo-p1",
+          "text": "Many small and medium-sized enterprises are eager to embrace AI but often find themselves stuck during implementation. Over the next few weeks, I will be observing teams facing these challenges. To help you move forward, here are practical steps you can take starting tomorrow to kickstart your AI adoption journey.",
+          "generationIndex": 1,
+          "createdAt": 1771540602234
+        },
+        {
+          "id": "mlu1j6ck-ui4cuh0haoo-o1",
+          "text": "Kleine en middelgrote bedrijven willen graag AI omarmen, maar lopen vaak tegen obstakels aan bij de uitvoering.",
+          "optionKey": "regenerate",
+          "sourcePostId": "mlu1j6ck-ui4cuh0haoo-p1",
+          "createdAt": 1771541139058
+        }
+      ],
+      "day": "2026-02-19",
+      "startedAt": 1771540598756,
+      "confirmed": true,
+      "confirmedPostId": "mlu1j6ck-ui4cuh0haoo-p1",
+      "confirmedWasFree": true,
+      "startCostCharged": 0,
+      "actionResults": {
+        "proof-generate-1": {
+          "ok": true,
+          "post": "Many small and medium-sized enterprises are eager to embrace AI but often find themselves stuck during implementation. Over the next few weeks, I will be observing teams facing these challenges. To help you move forward, here are practical steps you can take starting tomorrow to kickstart your AI adoption journey.",
+          "postId": "mlu1j6ck-ui4cuh0haoo-p1",
+          "confirmed": false,
+          "cost": 0,
+          "coinsLeft": 50,
+          "coinsRemaining": 50,
+          "primaryLanguage": "en",
+          "outputLanguage": "en",
+          "_ts": 1771540602234
+        },
+        "proof-download-official": {
+          "ok": true,
+          "postId": "mlu1j6ck-ui4cuh0haoo-p1",
+          "confirmed": true,
+          "cost": 0,
+          "freeWindowActive": true,
+          "isOfficial": true,
+          "coinsLeft": 48,
+          "coinsRemaining": 48,
+          "_ts": 1771540605228
+        },
+        "proof-download-official-b": {
+          "ok": true,
+          "postId": "mlu1j6ck-ui4cuh0haoo-p1",
+          "confirmed": true,
+          "cost": 0,
+          "freeWindowActive": true,
+          "isOfficial": true,
+          "coinsLeft": 45,
+          "coinsRemaining": 45,
+          "_ts": 1771540646520
+        },
+        "final-regen-1": {
+          "ok": true,
+          "optionKey": "regenerate",
+          "postId": "mlu1j6ck-ui4cuh0haoo-o1",
+          "sourcePostId": "mlu1j6ck-ui4cuh0haoo-p1",
+          "cost": 1,
+          "debitedFor": "regenerate",
+          "coinsLeft": 44,
+          "coinsRemaining": 44,
+          "confirmed": true,
+          "post": "Kleine en middelgrote bedrijven willen graag AI omarmen, maar lopen vaak tegen obstakels aan bij de uitvoering.",
+          "_ts": 1771541139058
+        }
+      },
+      "confirmedAt": 1771540602236
+    },
+    "canon-qa-1771627278": {
+      "id": "mlvh51lf-p7aj5pjuts9",
+      "userId": "canon-qa-1771627278",
+      "postNumber": 1,
+      "generationIndex": 3,
+      "variantCount": 3,
+      "optionVariantCount": 0,
+      "generatedPosts": [
+        "Vandaag wil ik jullie informeren over onze voortgang in het verbeteren van samenwerking en klantwaarde. We hebben waardevolle feedback verzameld, onze processen geoptimaliseerd en duidelijke volgende stappen vastgesteld voor zowel ons team als onze partners.",
+        "In onze voortdurende zoektocht naar verbetering wil ik graag een update delen over onze inspanningen om de samenwerking en klantwaarde te verhogen. We hebben recent waardevolle inzichten verzameld die ons hebben geholpen onze processen te verfijnen. Op basis van deze feedback hebben we heldere vervolgstappen geformuleerd, zowel voor ons team als voor onze partners.",
+        "Vandaag willen we jullie een overzicht geven van onze recente ontwikkelingen op het gebied van samenwerking en klantwaarde. Door het verzamelen van feedback hebben we onze processen aangescherpt en duidelijke vervolgstappen gedefinieerd die zowel ons team als onze partners ten goede zullen komen."
+      ],
+      "generatedItems": [
+        {
+          "id": "mlvh51lf-p7aj5pjuts9-p1",
+          "text": "Vandaag wil ik jullie informeren over onze voortgang in het verbeteren van samenwerking en klantwaarde. We hebben waardevolle feedback verzameld, onze processen geoptimaliseerd en duidelijke volgende stappen vastgesteld voor zowel ons team als onze partners.",
+          "generationIndex": 1,
+          "createdAt": 1771627283902
+        },
+        {
+          "id": "mlvh51lf-p7aj5pjuts9-p2",
+          "text": "In onze voortdurende zoektocht naar verbetering wil ik graag een update delen over onze inspanningen om de samenwerking en klantwaarde te verhogen. We hebben recent waardevolle inzichten verzameld die ons hebben geholpen onze processen te verfijnen. Op basis van deze feedback hebben we heldere vervolgstappen geformuleerd, zowel voor ons team als voor onze partners.",
+          "generationIndex": 2,
+          "createdAt": 1771627287707
+        },
+        {
+          "id": "mlvh51lf-p7aj5pjuts9-p3",
+          "text": "Vandaag willen we jullie een overzicht geven van onze recente ontwikkelingen op het gebied van samenwerking en klantwaarde. Door het verzamelen van feedback hebben we onze processen aangescherpt en duidelijke vervolgstappen gedefinieerd die zowel ons team als onze partners ten goede zullen komen.",
+          "generationIndex": 3,
+          "createdAt": 1771627291339
+        }
+      ],
+      "regenerateCount": 2,
+      "day": "2026-02-20",
+      "startedAt": 1771627279443,
+      "confirmed": true,
+      "confirmedPostId": "mlvh51lf-p7aj5pjuts9-p3",
+      "activePostId": "mlvh51lf-p7aj5pjuts9-p3",
+      "confirmedWasFree": true,
+      "startCostCharged": 0,
+      "actionResults": {},
+      "confirmedAt": 1771627291665
+    },
+    "qa-1771629087": {
+      "id": "mlvi7srm-oz931hr44y",
+      "userId": "qa-1771629087",
+      "postNumber": 1,
+      "generationIndex": 3,
+      "variantCount": 3,
+      "optionVariantCount": 0,
+      "generatedPosts": [
+        "Vandaag wil ik jullie informeren over de voortgang in onze samenwerking en hoe we de waarde voor onze klanten verbeteren. We hebben waardevolle feedback verzameld, onze processen geoptimaliseerd en duidelijke vervolgstappen vastgesteld voor zowel ons team als onze partners.",
+        "Het is tijd om jullie bij te praten over onze voortgang en de stappen die we hebben gezet om de samenwerking te verbeteren. We hebben intensief geluisterd naar de feedback die we hebben ontvangen en deze inzichten gebruikt om onze processen te verfijnen. Hierdoor kunnen we nu met vertrouwen de volgende stappen presenteren, zowel voor ons team als voor onze partners. Deze ontwikkelingen zijn cruciaal voor het verhogen van de waarde die we aan onze klanten bieden.",
+        "In het kader van onze voortdurende inspanningen om de samenwerking te optimaliseren, breng ik jullie graag op de hoogte van onze recente ontwikkelingen. We hebben feedback grondig geanalyseerd, onze processen aangescherpt en hebben nu heldere vervolgstappen geformuleerd voor zowel ons team als onze partners. Deze stappen zijn essentieel om de waarde voor onze klanten verder te verhogen."
+      ],
+      "generatedItems": [
+        {
+          "id": "mlvi7srm-oz931hr44y-p1",
+          "text": "Vandaag wil ik jullie informeren over de voortgang in onze samenwerking en hoe we de waarde voor onze klanten verbeteren. We hebben waardevolle feedback verzameld, onze processen geoptimaliseerd en duidelijke vervolgstappen vastgesteld voor zowel ons team als onze partners.",
+          "generationIndex": 1,
+          "createdAt": 1771629090766
+        },
+        {
+          "id": "mlvi7srm-oz931hr44y-p2",
+          "text": "Het is tijd om jullie bij te praten over onze voortgang en de stappen die we hebben gezet om de samenwerking te verbeteren. We hebben intensief geluisterd naar de feedback die we hebben ontvangen en deze inzichten gebruikt om onze processen te verfijnen. Hierdoor kunnen we nu met vertrouwen de volgende stappen presenteren, zowel voor ons team als voor onze partners. Deze ontwikkelingen zijn cruciaal voor het verhogen van de waarde die we aan onze klanten bieden.",
+          "generationIndex": 2,
+          "createdAt": 1771629095514
+        },
+        {
+          "id": "mlvi7srm-oz931hr44y-p3",
+          "text": "In het kader van onze voortdurende inspanningen om de samenwerking te optimaliseren, breng ik jullie graag op de hoogte van onze recente ontwikkelingen. We hebben feedback grondig geanalyseerd, onze processen aangescherpt en hebben nu heldere vervolgstappen geformuleerd voor zowel ons team als onze partners. Deze stappen zijn essentieel om de waarde voor onze klanten verder te verhogen.",
+          "generationIndex": 3,
+          "createdAt": 1771629099308
+        }
+      ],
+      "regenerateCount": 2,
+      "day": "2026-02-20",
+      "startedAt": 1771629087586,
+      "confirmed": false,
+      "confirmedPostId": null,
+      "activePostId": null,
+      "confirmedWasFree": false,
+      "startCostCharged": 0,
+      "actionResults": {}
+    },
+    "qa-1771629306": {
+      "id": "mlvichpq-da1lc3b71ul",
+      "userId": "qa-1771629306",
+      "postNumber": 1,
+      "generationIndex": 1,
+      "variantCount": 1,
+      "optionVariantCount": 0,
+      "generatedPosts": [],
+      "generatedItems": [],
+      "regenerateCount": 0,
+      "day": "2026-02-20",
+      "startedAt": 1771629306543,
+      "confirmed": false,
+      "confirmedPostId": null,
+      "activePostId": null,
+      "confirmedWasFree": false,
+      "startCostCharged": 0,
+      "actionResults": {}
+    },
+    "qa-1771629376": {
+      "id": "mlvie011-by9oxf497ph",
+      "userId": "qa-1771629376",
+      "postNumber": 1,
+      "generationIndex": 1,
+      "variantCount": 1,
+      "optionVariantCount": 0,
+      "generatedPosts": [],
+      "generatedItems": [],
+      "regenerateCount": 0,
+      "day": "2026-02-20",
+      "startedAt": 1771629376933,
+      "confirmed": false,
+      "confirmedPostId": null,
+      "activePostId": null,
+      "confirmedWasFree": false,
+      "startCostCharged": 0,
+      "actionResults": {}
+    },
+    "qa-1771629601": {
+      "id": "mlviitjt-0l7hqbqv23bq",
+      "userId": "qa-1771629601",
+      "postNumber": 1,
+      "generationIndex": 3,
+      "variantCount": 3,
+      "optionVariantCount": 0,
+      "generatedPosts": [],
+      "generatedItems": [],
+      "regenerateCount": 2,
+      "day": "2026-02-20",
+      "startedAt": 1771629601817,
+      "confirmed": false,
+      "confirmedPostId": null,
+      "activePostId": null,
+      "confirmedWasFree": false,
+      "startCostCharged": 0,
+      "actionResults": {}
+    },
+    "qa-1771629685": {
+      "id": "mlviljjk-mu9oqyqsi1c",
+      "userId": "qa-1771629685",
+      "postNumber": 1,
+      "generationIndex": 3,
+      "variantCount": 3,
+      "optionVariantCount": 0,
+      "generatedPosts": [],
+      "generatedItems": [],
+      "regenerateCount": 2,
+      "day": "2026-02-20",
+      "startedAt": 1771629728816,
+      "confirmed": false,
+      "confirmedPostId": null,
+      "activePostId": null,
+      "confirmedWasFree": false,
+      "startCostCharged": 0,
+      "actionResults": {}
+    },
+    "qa-1771629927": {
+      "id": "mlvipt36-rtthsu8r8qj",
+      "userId": "qa-1771629927",
+      "postNumber": 1,
+      "generationIndex": 3,
+      "variantCount": 3,
+      "optionVariantCount": 0,
+      "generatedPosts": [
+        "Vandaag willen we u informeren over onze verbeterde aanpak voor samenwerking en klantwaarde. We hebben waardevolle feedback verzameld, onze processen verfijnd en duidelijke volgende stappen vastgesteld voor zowel ons team als onze partners.",
+        "Vandaag neem ik u mee in de ontwikkelingen rondom onze samenwerking en de waarde die we voor onze klanten willen creëren. Door het verzamelen van waardevolle feedback hebben we onze processen kunnen verbeteren. We hebben nu heldere volgende stappen geformuleerd, zowel voor ons team als voor onze partners, zodat we gezamenlijk verder kunnen groeien.",
+        "In het licht van recente ontwikkelingen willen we u graag op de hoogte brengen van onze strategie voor een betere samenwerking en verhoogde klantwaarde. Dankzij de waardevolle feedback die we hebben ontvangen, hebben we onze processen geoptimaliseerd en zijn we nu in staat om concrete volgende stappen te zetten, zowel voor ons team als voor onze partners."
+      ],
+      "generatedItems": [
+        {
+          "id": "mlvipt36-rtthsu8r8qj-p1",
+          "text": "Vandaag willen we u informeren over onze verbeterde aanpak voor samenwerking en klantwaarde. We hebben waardevolle feedback verzameld, onze processen verfijnd en duidelijke volgende stappen vastgesteld voor zowel ons team als onze partners.",
+          "generationIndex": 1,
+          "createdAt": 1771629930286
+        },
+        {
+          "id": "mlvipt36-rtthsu8r8qj-p2",
+          "text": "Vandaag neem ik u mee in de ontwikkelingen rondom onze samenwerking en de waarde die we voor onze klanten willen creëren. Door het verzamelen van waardevolle feedback hebben we onze processen kunnen verbeteren. We hebben nu heldere volgende stappen geformuleerd, zowel voor ons team als voor onze partners, zodat we gezamenlijk verder kunnen groeien.",
+          "generationIndex": 2,
+          "createdAt": 1771629932985
+        },
+        {
+          "id": "mlvipt36-rtthsu8r8qj-p3",
+          "text": "In het licht van recente ontwikkelingen willen we u graag op de hoogte brengen van onze strategie voor een betere samenwerking en verhoogde klantwaarde. Dankzij de waardevolle feedback die we hebben ontvangen, hebben we onze processen geoptimaliseerd en zijn we nu in staat om concrete volgende stappen te zetten, zowel voor ons team als voor onze partners.",
+          "generationIndex": 3,
+          "createdAt": 1771629936018
+        }
+      ],
+      "regenerateCount": 2,
+      "day": "2026-02-20",
+      "startedAt": 1771629927810,
+      "confirmed": true,
+      "confirmedPostId": "mlvipt36-rtthsu8r8qj-p3",
+      "activePostId": "mlvipt36-rtthsu8r8qj-p3",
+      "confirmedWasFree": true,
+      "startCostCharged": 0,
+      "actionResults": {},
+      "confirmedAt": 1771629936111
+    },
+    "test-user": {
+      "id": "mm19pr1f-6g983xn602t",
+      "userId": "test-user",
+      "postNumber": 1,
+      "generationIndex": 1,
+      "variantCount": 1,
+      "optionVariantCount": 0,
+      "generatedPosts": [
+        "Artificial intelligence is rapidly transforming the tech landscape. As professionals, it is crucial to stay informed about these advancements and their implications for our industries. Embracing AI can enhance efficiency and drive innovation, making it an essential focus for future growth."
+      ],
+      "generatedItems": [
+        {
+          "id": "mm19pr1f-6g983xn602t-p1",
+          "text": "Artificial intelligence is rapidly transforming the tech landscape. As professionals, it is crucial to stay informed about these advancements and their implications for our industries. Embracing AI can enhance efficiency and drive innovation, making it an essential focus for future growth.",
+          "generationIndex": 1,
+          "createdAt": 1771977609454
+        }
+      ],
+      "regenerateCount": 0,
+      "day": "2026-02-25",
+      "startedAt": 1771977605667,
+      "confirmed": false,
+      "confirmedPostId": null,
+      "activePostId": null,
+      "confirmedWasFree": false,
+      "startCostCharged": 0,
+      "actionResults": {}
+    }
+  }
+}
