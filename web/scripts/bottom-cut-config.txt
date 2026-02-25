@@ -1,0 +1,10 @@
+# Zet per video het gewenste snijpercentage voor de onderkant.
+# Formaat: bestandsnaam.mp4=percentage
+# Tip: begin met 10, verhoog naar 12 als letters nog zichtbaar zijn.
+
+Bedankt-beach.mp4=10
+Sahara- fata.mp4=10
+aurora.mp4=10
+meer opties-rainforest.mp4=10
+mountains-delta.mp4=10
+waterfall-cave.mp4=10

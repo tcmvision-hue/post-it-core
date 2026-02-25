@@ -5,7 +5,7 @@
 - routing
 - data-opslag
 - accounts
-- AI
+- automatische generatiebeslissingen
 - beslissingen na intake
 
 Alles hierboven is bewust uitgesloten uit Fase 1.
@@ -32,4 +32,16 @@ Elke volgende stap vereist:
 
 ---
 
-*Einde README — POST IT Fase 1*
+*Einde README — POST THIS Fase 1*
+
+---
+
+## Canon production smoke test
+Gebruik één script (geen lange copy-paste blokken):
+
+```bash
+cd web
+bash scripts/canon-smoke-prod.sh https://post-it-core.vercel.app
+```
+
+Verwachte output: `PASS1` t/m `PASS5` en daarna `[canon] ALL PASS`.
