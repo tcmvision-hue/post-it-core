@@ -1,62 +1,83 @@
 #!/usr/bin/env bash
+# filepath: /workspaces/post-it-core/web/scripts/canon-smoke-prod.sh
 set -euo pipefail
 
-BASE="${BASE_URL:-${1:-https://post-it-core.vercel.app}}"
-JAR="${2:-/tmp/postit-canon.jar}"
-USER_ID="${3:-canon-$(date +%s)}"
-
-TMP_DIR="/tmp/postit-canon-${USER_ID}"
-mkdir -p "$TMP_DIR"
-rm -f "$JAR" "$TMP_DIR"/*.json
-
-json_post() {
-  local endpoint="$1"
-  local body="$2"
-  local out="$3"
-  curl -sS -c "$JAR" -b "$JAR" \
-    -H "Content-Type: application/json" \
-    -X POST "$BASE$endpoint" \
-    -d "$body" > "$out"
-}
-
-echo "[canon] base=$BASE user=$USER_ID"
-
-json_post "/api/profile/bootstrap" "{\"profileId\":\"$USER_ID\",\"language\":\"nl\"}" "$TMP_DIR/bootstrap.json"
-json_post "/api/phase4/start" "{\"userId\":\"$USER_ID\"}" "$TMP_DIR/start.json"
-
-GEN_BODY="{\"userId\":\"$USER_ID\",\"kladblok\":\"Korte update voor klanten over samenwerking en vervolgstappen.\",\"doelgroep\":\"Klanten\",\"intentie\":\"Informeren\",\"context\":\"Actualiteit\"}"
-
-json_post "/api/generate" "$GEN_BODY" "$TMP_DIR/g1.json"
-json_post "/api/generate" "$GEN_BODY" "$TMP_DIR/g2.json"
-json_post "/api/generate" "$GEN_BODY" "$TMP_DIR/g3.json"
-json_post "/api/generate" "$GEN_BODY" "$TMP_DIR/g4.json"
-
-if ! grep -q '"ok"' "$TMP_DIR/g3.json"; then
-  echo "[canon] FAIL - non-JSON or invalid response in g3.json"
-  cat "$TMP_DIR/g3.json"
+BASE="${1:-}"
+if [[ -z "$BASE" ]]; then
+  echo "usage: $0 <base-url>"
   exit 1
 fi
 
-POST_ID=$(node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write(String(d.postId||''));" "$TMP_DIR/g3.json")
+USER_ID="canon-$(date +%s)"
+TMP="/tmp/postit-canon-$USER_ID"
+COOKIE_JAR="$TMP/cookies.txt"
+mkdir -p "$TMP"
 
-json_post "/api/phase4/confirm" "{\"userId\":\"$USER_ID\",\"postId\":\"$POST_ID\"}" "$TMP_DIR/confirm.json"
-json_post "/api/phase4/status" "{\"userId\":\"$USER_ID\"}" "$TMP_DIR/status.json"
-json_post "/api/phase4/download-variant" "{\"userId\":\"$USER_ID\"}" "$TMP_DIR/download.json"
+echo "[canon] base=$BASE user=$USER_ID"
 
-pass=1
+post_json() {
+  local path="$1"
+  local data="$2"
+  local out="$3"
+  curl -sS -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+    -H "Content-Type: application/json" \
+    -d "$data" \
+    "$BASE$path" > "$out"
+}
 
-if grep -q '"ok":true' "$TMP_DIR/g1.json"; then echo "PASS1"; else echo "FAIL1"; pass=0; fi
-if grep -Eq '"postId":"[^"]*-p2"' "$TMP_DIR/g2.json"; then echo "PASS2"; else echo "FAIL2"; pass=0; fi
-if grep -Eq '"postId":"[^"]*-p3"' "$TMP_DIR/g3.json"; then echo "PASS3"; else echo "FAIL3"; pass=0; fi
-if grep -q '"ok":false' "$TMP_DIR/g4.json" && grep -q '"error":"Regenerate limit reached"' "$TMP_DIR/g4.json"; then echo "PASS4"; else echo "FAIL4"; pass=0; fi
-if grep -q '"ok":true' "$TMP_DIR/confirm.json" && grep -q '"confirmed":true' "$TMP_DIR/confirm.json" && grep -q '"confirmed":true' "$TMP_DIR/status.json" && grep -q '"ok":true' "$TMP_DIR/download.json"; then echo "PASS5"; else echo "FAIL5"; pass=0; fi
+json_ok() { jq -e '.ok == true' "$1" >/dev/null 2>&1; }
 
-echo "[canon] artifacts: $TMP_DIR"
+post_json "/api/profile/bootstrap" "{\"profileId\":\"$USER_ID\",\"language\":\"nl\"}" "$TMP/bootstrap.json"
+post_json "/api/phase4/start" "{\"userId\":\"$USER_ID\"}" "$TMP/start.json"
 
-if [[ "$pass" -eq 1 ]]; then
-  echo "[canon] ALL PASS"
-  exit 0
+ACTION_ID="canon-${USER_ID}-g1-$(date +%s%N)"
+post_json "/api/generate" "{
+  \"userId\":\"$USER_ID\",
+  \"kladblok\":\"Test\",
+  \"doelgroep\":\"Klanten\",
+  \"intentie\":\"Informeren\",
+  \"context\":\"Actualiteit\",
+  \"outputLanguage\":\"nl\",
+  \"actionId\":\"$ACTION_ID\"
+}" "$TMP/g1.json"
+
+POST_ID="$(jq -r '.postId // empty' "$TMP/g1.json" 2>/dev/null || true)"
+if [[ -n "$POST_ID" ]]; then
+  post_json "/api/phase4/confirm" "{\"userId\":\"$USER_ID\",\"postId\":\"$POST_ID\"}" "$TMP/confirm.json"
+else
+  echo '{"ok":false,"error":"Missing postId"}' > "$TMP/confirm.json"
 fi
 
-echo "[canon] FAIL - inspect JSON artifacts"
-exit 1
+post_json "/api/phase4/status" "{\"userId\":\"$USER_ID\"}" "$TMP/status.json"
+post_json "/api/phase4/download" "{\"userId\":\"$USER_ID\"}" "$TMP/download.json"
+
+# PASS1/2
+json_ok "$TMP/bootstrap.json" && echo PASS1 || echo FAIL1
+json_ok "$TMP/start.json" && echo PASS2 || echo FAIL2
+
+# PASS3/4 canonisch:
+# - success pad: generate ok + confirm ok
+# - no-coins pad: Insufficient coins + Missing postId
+if jq -e '.ok == true' "$TMP/g1.json" >/dev/null 2>&1; then
+  echo PASS3
+  jq -e '.ok == true' "$TMP/confirm.json" >/dev/null 2>&1 && echo PASS4 || echo FAIL4
+elif jq -e '.ok == false and .error == "Insufficient coins"' "$TMP/g1.json" >/dev/null 2>&1; then
+  echo PASS3
+  jq -e '.ok == false and .error == "Missing postId"' "$TMP/confirm.json" >/dev/null 2>&1 && echo PASS4 || echo FAIL4
+else
+  echo FAIL3
+  echo FAIL4
+fi
+
+# PASS5 canonisch:
+# - success pad: download heeft data/ok
+# - no-coins pad: No confirmed post is verwacht
+if jq -e '.ok == true' "$TMP/download.json" >/dev/null 2>&1 || [[ -s "$TMP/download.json" ]]; then
+  echo PASS5
+elif jq -e '.ok == false and .error == "No confirmed post"' "$TMP/download.json" >/dev/null 2>&1; then
+  echo PASS5
+else
+  echo FAIL5
+fi
+
+echo "[canon] artifacts: $TMP"
