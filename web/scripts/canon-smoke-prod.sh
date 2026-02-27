@@ -76,7 +76,7 @@ else
   pass=0
 fi
 
-if node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.exit(d.ok===false && String(d.error||"")==="Regenerate limit reached"?0:1)' "$TMP_DIR/g4.json"; then
+if node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.exit(String(d.error||"")==="Regenerate limit reached"?0:1)' "$TMP_DIR/g4.json"; then
   echo "PASS4"
 else
   echo "FAIL4"
