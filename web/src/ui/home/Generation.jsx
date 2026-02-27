@@ -8,6 +8,7 @@ import { useI18n } from "../../i18n/I18nContext";
 
 export default function Generation({
   cycleId,
+  onCycleIdRecovered,
   kladblok,
   doelgroep,
   intentie,
@@ -40,22 +41,45 @@ export default function Generation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function resolveCycleId(userId) {
+    const currentCycleId = String(cycleId || "").trim();
+    if (currentCycleId) return currentCycleId;
+
+    try {
+      const statusRes = await apiFetch("/api/phase4/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const statusData = await statusRes.json().catch(() => ({}));
+      const recoveredCycleId = String(statusData?.cycleId || "").trim();
+      if (statusRes.ok && statusData?.ok && recoveredCycleId) {
+        onCycleIdRecovered?.(recoveredCycleId);
+        return recoveredCycleId;
+      }
+    } catch {
+      // no-op, handled by caller
+    }
+
+    return "";
+  }
+
   async function runGeneration() {
     if (loading || confirming) return;
     if (generationCount >= 3) {
       setError("Regenerate limit reached");
       return;
     }
-    const activeCycleId = String(cycleId || "").trim();
+    const user = getUser();
+    const activeCycleId = await resolveCycleId(user.id);
     if (!activeCycleId) {
-      setError("Missing cycleId");
+      setError("Cycle niet gestart. Start opnieuw.");
       return;
     }
     setLoading(true);
     setError("");
 
     try {
-      const user = getUser();
       const actionId = createActionId("generate");
       const res = await apiFetch("/api/generate", {
         method: "POST",

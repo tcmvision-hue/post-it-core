@@ -459,8 +459,13 @@ export default function App() {
 
       const confirmedPostId = String(data?.confirmedPostId || "");
       const activePostId = String(data?.activePostId || confirmedPostId || "");
+      const cycleId = String(data?.cycleId || "");
       const coinsRemaining =
         data?.coinsRemaining ?? data?.coinsLeft ?? data?.coins ?? null;
+
+      if (cycleId) {
+        setActiveCycleId(cycleId);
+      }
 
       setPostLifecycle((prev) => {
         if (confirming && prev?.status === "creating") {
@@ -485,6 +490,7 @@ export default function App() {
 
       return {
         ok: true,
+        cycleId,
         confirmed: Boolean(data?.confirmed),
         confirmedPostId,
         activePostId,
@@ -573,7 +579,23 @@ export default function App() {
     setConfirming(true);
     try {
       const user = getUser();
-      const cycleId = String(activeCycleId || "").trim();
+      let cycleId = String(activeCycleId || "").trim();
+      if (!cycleId) {
+        const statusSync = await syncLifecycleFromStatus();
+        cycleId = String(statusSync?.cycleId || "").trim();
+      }
+      if (!cycleId) {
+        const message = "Cycle niet gestart. Start opnieuw.";
+        setConfirmError(message);
+        setPostLifecycle((prev) => ({
+          ...prev,
+          status: "failed",
+          error: message,
+          confirmed: false,
+        }));
+        setPhase(PHASES.COINS);
+        return;
+      }
       const normalizedInput = normalizePostPayload(postPayload);
       const candidatePostId = String(normalizedInput.postId || "");
       if (!candidatePostId) {
@@ -851,6 +873,7 @@ export default function App() {
         >
           <Generation
             cycleId={activeCycleId}
+            onCycleIdRecovered={setActiveCycleId}
             kladblok={intake?.kladblok}
             doelgroep={intake?.doelgroep}
             intentie={intake?.intentie}
