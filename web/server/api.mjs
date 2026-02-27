@@ -250,6 +250,53 @@ function ensureUser(store, userId, preferredLanguage) {
   return user;
 }
 
+function ensurePaymentUser(store, userId) {
+  const safeUserId = String(userId || "").trim();
+  if (!safeUserId) return null;
+
+  if (!store.users[safeUserId]) {
+    store.users[safeUserId] = {
+      profile_id: safeUserId,
+      primary_language: "en",
+      coins: 0,
+      last_free_post_date: null,
+      last_free_post_timestamp: null,
+      last_free_download_timestamp: null,
+      created_at: new Date().toISOString(),
+      day: todayKey(),
+      postCountToday: 0,
+    };
+  }
+
+  const user = store.users[safeUserId];
+  if (!user.profile_id) user.profile_id = safeUserId;
+  if (!user.created_at) user.created_at = new Date().toISOString();
+  if (!user.last_free_post_date) user.last_free_post_date = null;
+  if (typeof user.last_free_post_timestamp === "undefined") {
+    const migrated = Date.parse(String(user.last_free_post_date || ""));
+    user.last_free_post_timestamp = Number.isFinite(migrated)
+      ? new Date(migrated).toISOString()
+      : null;
+  }
+  if (typeof user.last_free_download_timestamp === "undefined") {
+    user.last_free_download_timestamp = null;
+  }
+  if (!user.primary_language) {
+    user.primary_language = "en";
+  }
+  user.primary_language = normalizeOutputLanguage(user.primary_language, "en");
+  if (user.primary_language === "auto") {
+    user.primary_language = "en";
+  }
+  if (!user.day) {
+    user.day = todayKey();
+  }
+  if (typeof user.postCountToday !== "number") {
+    user.postCountToday = 0;
+  }
+  return user;
+}
+
 function getCycle(store, userId) {
   if (!store.cycles || typeof store.cycles !== "object") return null;
   const cycle = store.cycles[userId];
@@ -291,9 +338,11 @@ async function _reconcilePendingPaymentsForUser(store, userId) {
       entry.coins = creditedCoins;
 
       if (payment?.status === "paid" && !entry.credited && creditedCoins > 0) {
-        const user = ensureUser(store, userId);
+        const user = ensurePaymentUser(store, userId);
+        if (!user) continue;
         user.coins = (Number(user.coins) || 0) + creditedCoins;
         entry.credited = true;
+        entry.creditedAt = Date.now();
       }
     } catch (error) {
       console.error("Phase4 reconcile payment error:", error);
@@ -346,13 +395,18 @@ async function reconcilePaymentByIdForUser(store, userId, paymentIdRaw) {
 
     const entry = store.payments[paymentId];
     entry.userId = entry.userId || resolvedUserId;
+    if (entry.userId !== resolvedUserId) {
+      return false;
+    }
     entry.coins = Number(entry.coins ?? paidCoins) || paidCoins;
     entry.status = payment?.status || entry.status;
 
     if (payment?.status === "paid" && !entry.credited) {
-      const user = ensureUser(store, userId);
+      const user = ensurePaymentUser(store, userId);
+      if (!user) return false;
       user.coins = (Number(user.coins) || 0) + (Number(entry.coins) || 0);
       entry.credited = true;
+      entry.creditedAt = Date.now();
       return true;
     }
 
@@ -413,65 +467,7 @@ app.post("/api/profile/bootstrap", async (req, res) => {
 
 app.post("/api/profile/primary-language", async (req, res) => {
   try {
-    const { userId, targetLanguage } = req.body || {};
-    if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
-    }
-    if (!targetLanguage || typeof targetLanguage !== "string") {
-      return res.status(400).json({ error: "Missing targetLanguage" });
-    }
-    if (!isSupportedOutputLanguage(targetLanguage)) {
-      return res.status(400).json({ error: "Invalid targetLanguage" });
-    }
-
-    const normalizedTargetLanguage = normalizeOutputLanguage(targetLanguage, "en");
-    if (normalizedTargetLanguage === "auto") {
-      return res.status(400).json({ error: "Invalid targetLanguage" });
-    }
-
-    const result = await withStore((store) => {
-      const user = ensureUser(store, userId);
-      const currentPrimaryLanguage = normalizeOutputLanguage(user.primary_language, "en");
-      if (currentPrimaryLanguage === normalizedTargetLanguage) {
-        return {
-          ok: true,
-          changed: false,
-          cost: 0,
-          coinsLeft: user.coins,
-          primaryLanguage: currentPrimaryLanguage,
-        };
-      }
-
-      const adminSecret = String(process.env.ADMIN_SECRET || "").trim();
-      const providedSecret = String(req.headers["x-admin-secret"] || "").trim();
-      const isAdminReset = Boolean(adminSecret && providedSecret && adminSecret === providedSecret);
-      if (!isAdminReset) {
-        return {
-          ok: false,
-          error: "Primary language locked",
-          coins: user.coins,
-          coinsLeft: user.coins,
-          primaryLanguage: currentPrimaryLanguage,
-        };
-      }
-
-      const cost = 0;
-      user.primary_language = normalizedTargetLanguage;
-      return {
-        ok: true,
-        changed: true,
-        cost,
-        coinsLeft: user.coins,
-        primaryLanguage: user.primary_language,
-      };
-    });
-
-    if (!result.ok) {
-      return res.status(400).json(result);
-    }
-
-    setUserCookie(res, userId);
-    return res.json(result);
+    return res.status(403).json({ error: "Primary language locked" });
   } catch (err) {
     console.error("Primary language update error:", err);
     return res.status(500).json({ error: "Primary language update failed" });
@@ -1065,6 +1061,7 @@ app.post("/api/phase4/status", async (req, res) => {
         coins: user.coins,
         coinsLeft: user.coins,
         coinsRemaining: user.coins,
+        cycleId: cycle?.id || null,
         confirmed: Boolean(cycle?.confirmed),
         confirmedPostId: cycle?.confirmedPostId || null,
         activePostId: cycle?.activePostId || cycle?.confirmedPostId || null,
@@ -1131,6 +1128,7 @@ app.post("/api/phase4/start", async (req, res) => {
 
       return {
         ok: true,
+        cycleId: cycle.id,
         postNumber,
         costToStart,
         daySlotUsed,
@@ -1153,7 +1151,10 @@ app.post("/api/phase4/start", async (req, res) => {
     function sendOptionResponse(payload) {
       setUserCookie(res, userId);
       writeStateCookie(res, userId, activeUser, activeCycle);
-      return res.json(payload);
+      return res.json({
+        ...payload,
+        cycleId: activeCycle?.id || null,
+      });
     }
     return sendOptionResponse(result);
   } catch (err) {
@@ -1166,6 +1167,7 @@ app.post("/api/phase4/option", async (req, res) => {
   try {
     const payload = req.body || {};
     const userId = resolveUserId(req, payload.userId);
+    const cycleId = String(payload.cycleId || "").trim();
     const optionKey = payload.optionKey;
     const post = payload.post;
     const postId = String(payload.postId || "").trim();
@@ -1175,6 +1177,9 @@ app.post("/api/phase4/option", async (req, res) => {
       payload.targetLanguage ?? payload.outputLanguage ?? payload.language;
     if (!userId) {
       return res.status(400).json({ ok: false, error: "Missing userId" });
+    }
+    if (!cycleId) {
+      return res.status(400).json({ ok: false, error: "Missing cycleId" });
     }
     if (optionKey === "download") {
       return res.status(400).json({ ok: false, error: "Use download endpoint" });
@@ -1208,7 +1213,25 @@ app.post("/api/phase4/option", async (req, res) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
 
-      if (!cycle || !cycle.confirmed) {
+      if (!cycle) {
+        return {
+          ok: false,
+          error: "Cycle not started",
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (String(cycle.id || "") !== cycleId) {
+        return {
+          ok: false,
+          error: "Invalid cycleId",
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (!cycle.confirmed) {
         return {
           ok: false,
           error: "No confirmed post",
@@ -1503,15 +1526,25 @@ app.post(
         }
 
         const entry = store.payments[paymentId];
+        const metadataUserId = String(payment?.metadata?.userId || "").trim();
+        if (metadataUserId) {
+          if (!entry.userId) {
+            entry.userId = metadataUserId;
+          } else if (entry.userId !== metadataUserId) {
+            return;
+          }
+        }
         entry.status = payment?.status || entry.status;
 
         if (payment?.status === "paid" && !entry.credited) {
-          const user = ensureUser(store, entry.userId);
+          const user = ensurePaymentUser(store, entry.userId);
+          if (!user) return;
           const coins = Number(entry.coins) || 0;
           const previousCoins = Number(user.coins) || 0;
           entry.coins = coins;
           user.coins = previousCoins + coins;
           entry.credited = true;
+          entry.creditedAt = Date.now();
           console.log("[MOLLIE_WEBHOOK_CREDIT]", {
             profile_id: user.profile_id || entry.userId,
             payment_id: paymentId,
@@ -1536,6 +1569,7 @@ app.get("/api/phase4/webhook", (req, res) => {
 app.post("/api/generate", async (req, res) => {
   try {
     const payload = req.body || {};
+    const cycleId = String(payload.cycleId || "").trim();
     const kladblok = payload.kladblok;
     const doelgroep = payload.doelgroep;
     const intentie = payload.intentie;
@@ -1549,36 +1583,13 @@ app.post("/api/generate", async (req, res) => {
     if (!userId) {
       return res.status(403).json({ ok: false, error: "Cycle not started" });
     }
+    if (!cycleId) {
+      return res.status(400).json({ ok: false, error: "Missing cycleId" });
+    }
 
     const generationAccess = await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
-      let cycle = getCycle(store, userId);
-
-      if (!cycle) {
-        const daySlotUsed = isDaySlotUsed(user);
-        const costToStart = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
-        if (costToStart > 0 && user.coins < costToStart) {
-          return {
-            ok: false,
-            error: "Insufficient coins",
-            coins: user.coins,
-            coinsRemaining: user.coins,
-            coinsLeft: user.coins,
-            cost: costToStart,
-            confirmed: false,
-          };
-        }
-        if (costToStart > 0) {
-          user.coins -= costToStart;
-        }
-
-        const postNumber = user.postCountToday + 1;
-        store.cycles[userId] = createCycle(userId, postNumber);
-        cycle = getCycle(store, userId);
-        if (cycle) {
-          cycle.startCostCharged = costToStart;
-        }
-      }
+      const cycle = getCycle(store, userId);
 
       if (!cycle) {
         return {
@@ -1587,6 +1598,17 @@ app.post("/api/generate", async (req, res) => {
           error: "Cycle not started",
           confirmed: false,
           coinsRemaining: user.coins,
+        };
+      }
+
+      if (String(cycle.id || "") !== cycleId) {
+        return {
+          ok: false,
+          statusCode: 403,
+          error: "Invalid cycleId",
+          confirmed: Boolean(cycle.confirmed),
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
         };
       }
 
@@ -1604,9 +1626,7 @@ app.post("/api/generate", async (req, res) => {
       }
 
       const primaryLanguage = normalizeOutputLanguage(user.primary_language, "en");
-      const requestedLanguage = normalizeOutputLanguage(outputLanguageRaw, primaryLanguage);
-      const resolvedOutputLanguage =
-        requestedLanguage === "auto" ? primaryLanguage : requestedLanguage;
+      const resolvedOutputLanguage = primaryLanguage;
 
       if (typeof cycle.regenerateCount !== "number") {
         cycle.regenerateCount = 0;
@@ -1616,18 +1636,13 @@ app.post("/api/generate", async (req, res) => {
       if (isRegenerateAttempt && cycle.regenerateCount >= 2) {
         return {
           ok: false,
-          error: "Regenerate limit reached",
-          confirmed: Boolean(cycle.confirmed),
-          postId: cycle.confirmedPostId || null,
-          regenerateCount: cycle.regenerateCount,
-          regeneratesRemaining: 0,
-          coinsRemaining: user.coins,
-          coinsLeft: user.coins,
+          statusCode: 429,
+          exactLimitError: true,
         };
       }
 
       const generationCost = 0;
-      const languageCost = resolvedOutputLanguage === primaryLanguage ? 0 : 3;
+      const languageCost = 0;
       const totalCost = generationCost + languageCost;
       if (totalCost > 0 && user.coins < totalCost) {
         return {
@@ -1637,7 +1652,6 @@ app.post("/api/generate", async (req, res) => {
           coinsRemaining: user.coins,
           cost: totalCost,
           primaryLanguage,
-          requestedLanguage: resolvedOutputLanguage,
           confirmed: Boolean(cycle.confirmed),
         };
       }
@@ -1683,6 +1697,9 @@ app.post("/api/generate", async (req, res) => {
     });
 
     if (!generationAccess.ok) {
+      if (generationAccess.exactLimitError) {
+        return res.status(429).json({ error: "Regenerate limit reached" });
+      }
       return res
         .status(generationAccess.statusCode || 400)
         .json(generationAccess);
@@ -1717,6 +1734,7 @@ app.post("/api/generate", async (req, res) => {
     const responsePayload = {
       ok: true,
       ...result,
+      cycleId,
       postId,
       confirmed: generationAccess.confirmed,
       cost: generationAccess.cost,
@@ -1730,13 +1748,9 @@ app.post("/api/generate", async (req, res) => {
 
     await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
-      let cycle = getCycle(store, userId);
-      if (!cycle) {
-        const postNumber = user.postCountToday + 1;
-        store.cycles[userId] = createCycle(userId, postNumber);
-        cycle = getCycle(store, userId);
-      }
+      const cycle = getCycle(store, userId);
       if (!cycle) return;
+      if (String(cycle.id || "") !== cycleId) return;
 
       if (!Array.isArray(cycle.generatedPosts)) {
         cycle.generatedPosts = [];
@@ -1778,9 +1792,13 @@ app.post("/api/phase4/confirm", async (req, res) => {
   try {
     const payload = req.body || {};
     const userId = resolveUserId(req, payload.userId);
+    const cycleId = String(payload.cycleId || "").trim();
     const postId = String(payload.postId || "").trim();
     if (!userId) {
       return res.status(400).json({ ok: false, error: "Missing userId" });
+    }
+    if (!cycleId) {
+      return res.status(400).json({ ok: false, error: "Missing cycleId" });
     }
     if (!postId) {
       return res.status(400).json({ ok: false, error: "Missing postId" });
@@ -1788,17 +1806,23 @@ app.post("/api/phase4/confirm", async (req, res) => {
 
     const result = await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
-      let cycle = getCycle(store, userId);
-      if (!cycle) {
-        const postNumber = user.postCountToday + 1;
-        store.cycles[userId] = createCycle(userId, postNumber);
-        cycle = getCycle(store, userId);
-      }
+      const cycle = getCycle(store, userId);
       if (!cycle) {
         return {
           ok: false,
-          statusCode: 400,
-          error: "No active cycle",
+          statusCode: 403,
+          error: "Cycle not started",
+        };
+      }
+
+      if (String(cycle.id || "") !== cycleId) {
+        return {
+          ok: false,
+          statusCode: 403,
+          error: "Invalid cycleId",
+          confirmed: Boolean(cycle.confirmed),
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
         };
       }
 
@@ -1913,20 +1937,59 @@ app.post("/api/phase4/download-variant", async (req, res) => {
   try {
     const payload = req.body || {};
     const userId = resolveUserId(req, payload.userId);
+    const cycleId = String(payload.cycleId || "").trim();
+    const confirmedPostId = String(payload.confirmedPostId || "").trim();
     const requestedPostId = String(payload.postId || "").trim();
     const actionId = normalizeActionId(payload.actionId);
     if (!userId) {
       return res.status(400).json({ ok: false, error: "Missing userId" });
     }
+    if (!cycleId) {
+      return res.status(400).json({ ok: false, error: "Missing cycleId" });
+    }
+    if (!confirmedPostId) {
+      return res.status(400).json({ ok: false, error: "Missing confirmedPostId" });
+    }
 
     const cycleCheck = await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
-      if (!cycle || !cycle.confirmed) {
+      if (!cycle) {
+        return {
+          ok: false,
+          error: "Cycle not started",
+          confirmed: false,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (String(cycle.id || "") !== cycleId) {
+        return {
+          ok: false,
+          error: "Invalid cycleId",
+          confirmed: Boolean(cycle.confirmed),
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (!cycle.confirmed) {
         return {
           ok: false,
           error: "No confirmed post",
           confirmed: false,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      const cycleConfirmedPostId = String(cycle.confirmedPostId || "");
+      if (!cycleConfirmedPostId || confirmedPostId !== cycleConfirmedPostId) {
+        return {
+          ok: false,
+          error: "Invalid confirmedPostId",
+          confirmed: Boolean(cycle.confirmed),
           coinsRemaining: user.coins,
           coinsLeft: user.coins,
         };
@@ -1961,7 +2024,7 @@ app.post("/api/phase4/download-variant", async (req, res) => {
       }
 
       const knownPost =
-        postId === String(cycle.confirmedPostId || "")
+        postId === cycleConfirmedPostId
         || generatedItems.some((entry) => String(entry?.id || "") === postId);
       if (!knownPost) {
         return {
@@ -1975,12 +2038,23 @@ app.post("/api/phase4/download-variant", async (req, res) => {
       }
 
       const isActiveVariant = activePostId === postId;
+      const isConfirmedPost = postId === cycleConfirmedPostId;
       const lastFreeDownloadTs = Date.parse(String(user?.last_free_download_timestamp || ""));
       const freeWindowAvailable = !Number.isFinite(lastFreeDownloadTs)
         || (Date.now() - lastFreeDownloadTs >= MS_24H);
-      const cost = isActiveVariant
-        ? (freeWindowAvailable ? 0 : 1)
-        : 1;
+
+      if (isConfirmedPost && !freeWindowAvailable) {
+        return {
+          ok: false,
+          error: "Free download already used",
+          confirmed: true,
+          postId,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      const cost = isConfirmedPost ? 0 : 1;
 
       if (cost > 0 && user.coins < cost) {
         return {
@@ -2003,7 +2077,7 @@ app.post("/api/phase4/download-variant", async (req, res) => {
         cycle.activePostId = postId;
       }
 
-      if (isActiveVariant && cost === 0) {
+      if (isConfirmedPost && cost === 0) {
         user.last_free_download_timestamp = new Date().toISOString();
       }
 
@@ -2033,7 +2107,10 @@ app.post("/api/phase4/download-variant", async (req, res) => {
     setUserCookie(res, userId);
     writeStateCookie(res, userId, cycleCheck.__cookieState?.user, cycleCheck.__cookieState?.cycle);
     delete cycleCheck.__cookieState;
-    res.json(cycleCheck);
+    res.json({
+      ...cycleCheck,
+      cycleId,
+    });
   } catch (err) {
     console.error("Phase4 download variant error:", err);
     res.status(500).json({ ok: false, error: "Download failed" });
