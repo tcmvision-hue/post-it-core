@@ -767,6 +767,26 @@ function readStateCookie(req, userId) {
 
 function compactCycleForStateCookie(cycle) {
   if (!cycle || typeof cycle !== "object") return null;
+  const generatedItems = Array.isArray(cycle.generatedItems)
+    ? cycle.generatedItems
+      .map((entry) => {
+        const id = String(entry?.id || "").trim();
+        if (!id) return null;
+        const text = String(entry?.text || "").slice(0, 600);
+        return { id, text };
+      })
+      .filter(Boolean)
+      .slice(-8)
+    : [];
+
+  const generatedPosts = Array.isArray(cycle.generatedPosts)
+    ? cycle.generatedPosts
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(-8)
+      .map((item) => item.slice(0, 600))
+    : [];
+
   return {
     id: String(cycle.id || ""),
     userId: String(cycle.userId || ""),
@@ -783,6 +803,8 @@ function compactCycleForStateCookie(cycle) {
     activePostId: cycle.activePostId ? String(cycle.activePostId) : null,
     confirmedWasFree: Boolean(cycle.confirmedWasFree),
     startCostCharged: Number(cycle.startCostCharged) || 0,
+    generatedPosts,
+    generatedItems,
   };
 }
 
@@ -793,6 +815,7 @@ function writeStateCookie(res, userId, user, cycle) {
     day: user.day || todayKey(),
     postCountToday: Number(user.postCountToday) || 0,
     coins: Number(user.coins) || 0,
+    primaryLanguage: normalizeOutputLanguage(user.primary_language, "en"),
     lastFreePostTimestamp: user.last_free_post_timestamp || null,
     cycle: compactCycleForStateCookie(cycle),
     ts: Date.now(),
@@ -824,6 +847,11 @@ function hydrateFromStateCookie(req, store, userId) {
   const coins = Number(state.coins);
   if (Number.isFinite(coins) && coins > (Number(user.coins) || 0)) {
     user.coins = coins;
+  }
+
+  const cookiePrimaryLanguage = normalizeOutputLanguage(state.primaryLanguage, "");
+  if (cookiePrimaryLanguage && cookiePrimaryLanguage !== "auto") {
+    user.primary_language = cookiePrimaryLanguage;
   }
 
   const cookieFreeTs = Date.parse(String(state.lastFreePostTimestamp || ""));
@@ -887,6 +915,31 @@ function hydrateFromStateCookie(req, store, userId) {
       target.activePostId = state.cycle.activePostId ? String(state.cycle.activePostId) : (target.confirmedPostId || null);
       target.confirmedWasFree = Boolean(state.cycle.confirmedWasFree);
       target.startCostCharged = Number(state.cycle.startCostCharged) || 0;
+
+      const cookieGeneratedPosts = Array.isArray(state.cycle.generatedPosts)
+        ? state.cycle.generatedPosts
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+        : [];
+
+      const cookieGeneratedItems = Array.isArray(state.cycle.generatedItems)
+        ? state.cycle.generatedItems
+          .map((entry) => {
+            const id = String(entry?.id || "").trim();
+            if (!id) return null;
+            const text = String(entry?.text || "");
+            return { id, text };
+          })
+          .filter(Boolean)
+        : [];
+
+      if (!Array.isArray(target.generatedPosts) || cookieGeneratedPosts.length > target.generatedPosts.length) {
+        target.generatedPosts = cookieGeneratedPosts;
+      }
+      if (!Array.isArray(target.generatedItems) || cookieGeneratedItems.length > target.generatedItems.length) {
+        target.generatedItems = cookieGeneratedItems;
+      }
+
       if (!Array.isArray(target.generatedPosts)) target.generatedPosts = [];
       if (!Array.isArray(target.generatedItems)) target.generatedItems = [];
       if (!target.actionResults || typeof target.actionResults !== "object") target.actionResults = {};
