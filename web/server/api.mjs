@@ -843,6 +843,13 @@ function hydrateFromStateCookie(req, store, userId) {
     const existing = getCycle(store, userId);
     const cookieStartedAt = Number(state.cycle.startedAt) || 0;
     const existingStartedAt = Number(existing?.startedAt) || 0;
+    const sameCycleId = String(state.cycle.id || "") !== ""
+      && String(state.cycle.id || "") === String(existing?.id || "");
+    const cookieGenerationIndex = Number(state.cycle.generationIndex) || 0;
+    const existingGenerationIndex = Number(existing?.generationIndex) || 0;
+    const cookieRegenerateCount = Number(state.cycle.regenerateCount) || 0;
+    const existingRegenerateCount = Number(existing?.regenerateCount) || 0;
+
     const shouldApplyCookieCycle =
       !existing
       || cookieStartedAt > existingStartedAt
@@ -850,6 +857,15 @@ function hydrateFromStateCookie(req, store, userId) {
         cookieStartedAt === existingStartedAt
         && Boolean(state.cycle.confirmed)
         && !existing.confirmed
+      )
+      || (
+        sameCycleId
+        && (
+          cookieGenerationIndex > existingGenerationIndex
+          || cookieRegenerateCount > existingRegenerateCount
+          || (Boolean(state.cycle.confirmedPostId) && !Boolean(existing?.confirmedPostId))
+          || (Boolean(state.cycle.activePostId) && !Boolean(existing?.activePostId))
+        )
       );
     if (shouldApplyCookieCycle) {
       if (!existing) {
