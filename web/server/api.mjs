@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import OpenAI from "openai";
+import { createClient } from "redis";
 import dotenv from "dotenv";
 import express from "express";
 import { generatePost } from "./generatePost.js";
@@ -33,6 +34,7 @@ let storeLock = Promise.resolve();
 const FALLBACK_STORE_KEY = "__post_this_coin_store";
 const KV_REST_API_URL = process.env.KV_REST_API_URL;
 const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN;
+const REDIS_URL = process.env.REDIS_URL;
 const KV_STORE_KEY = process.env.COIN_STORE_KV_KEY || "post-this:coin-store";
 const COIN_BUNDLES = {
   "20": { coins: 20, amount: "10.00" },
@@ -90,6 +92,60 @@ function normalizeStoreShape(parsed) {
 
 function kvEnabled() {
   return Boolean(KV_REST_API_URL && KV_REST_API_TOKEN);
+}
+
+function redisEnabled() {
+  return Boolean(REDIS_URL);
+}
+
+let redisClient = null;
+let redisConnectPromise = null;
+
+async function getRedisClient() {
+  if (!redisEnabled()) return null;
+
+  if (!redisClient) {
+    redisClient = createClient({ url: REDIS_URL });
+    redisClient.on("error", (error) => {
+      console.error("Redis client error:", error);
+    });
+  }
+
+  if (!redisClient.isOpen) {
+    if (!redisConnectPromise) {
+      redisConnectPromise = redisClient.connect()
+        .finally(() => {
+          redisConnectPromise = null;
+        });
+    }
+    await redisConnectPromise;
+  }
+
+  return redisClient;
+}
+
+async function redisLoadStore() {
+  const client = await getRedisClient();
+  if (!client) {
+    return { users: {}, payments: {} };
+  }
+
+  const raw = await client.get(KV_STORE_KEY);
+  if (!raw) {
+    return { users: {}, payments: {} };
+  }
+
+  try {
+    return normalizeStoreShape(JSON.parse(raw));
+  } catch {
+    return { users: {}, payments: {} };
+  }
+}
+
+async function redisSaveStore(store) {
+  const client = await getRedisClient();
+  if (!client) return;
+  await client.set(KV_STORE_KEY, JSON.stringify(store));
 }
 
 async function kvLoadStore() {
@@ -168,6 +224,15 @@ async function loadStore() {
       console.error("KV load failed, falling back to file/in-memory:", error);
     }
   }
+
+  if (redisEnabled()) {
+    try {
+      return await redisLoadStore();
+    } catch (error) {
+      console.error("Redis load failed, falling back to file/in-memory:", error);
+    }
+  }
+
   return loadStoreFromFile();
 }
 
@@ -180,6 +245,16 @@ async function saveStore(store) {
       console.error("KV save failed, falling back to file/in-memory:", error);
     }
   }
+
+  if (redisEnabled()) {
+    try {
+      await redisSaveStore(store);
+      return;
+    } catch (error) {
+      console.error("Redis save failed, falling back to file/in-memory:", error);
+    }
+  }
+
   saveStoreToFile(store);
 }
 
