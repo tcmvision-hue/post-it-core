@@ -7,6 +7,7 @@ import { primaryHomeButtonStyle } from "./sharedStyles";
 import { useI18n } from "../../i18n/I18nContext";
 
 export default function Generation({
+  cycleId,
   kladblok,
   doelgroep,
   intentie,
@@ -45,6 +46,11 @@ export default function Generation({
       setError("Regenerate limit reached");
       return;
     }
+    const activeCycleId = String(cycleId || "").trim();
+    if (!activeCycleId) {
+      setError("Missing cycleId");
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -56,6 +62,7 @@ export default function Generation({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
+          cycleId: activeCycleId,
           kladblok,
           doelgroep,
           intentie,

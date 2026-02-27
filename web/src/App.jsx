@@ -195,6 +195,7 @@ export default function App() {
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [hashtags, setHashtags] = useState([]);
   const [cycleMeta, setCycleMeta] = useState(null);
+  const [activeCycleId, setActiveCycleId] = useState("");
   const [confirmError, setConfirmError] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [postLifecycle, setPostLifecycle] = useState({
@@ -572,6 +573,7 @@ export default function App() {
     setConfirming(true);
     try {
       const user = getUser();
+      const cycleId = String(activeCycleId || "").trim();
       const normalizedInput = normalizePostPayload(postPayload);
       const candidatePostId = String(normalizedInput.postId || "");
       if (!candidatePostId) {
@@ -602,6 +604,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
+          cycleId,
           postId: candidatePostId,
           isOfficial: isOfficialSelection,
         }),
@@ -803,6 +806,7 @@ export default function App() {
           setVariants([]);
           setSelectedVariantId("");
           setCycleMeta(null);
+          setActiveCycleId("");
           setShowGeneration(false);
           setConfirming(false);
           setPostLifecycle({
@@ -823,7 +827,9 @@ export default function App() {
   if (phase === PHASES.COINS) {
     return (
       <CoinsGate
-        onStart={() => {
+        onStart={(startData) => {
+          const nextCycleId = String(startData?.cycleId || "").trim();
+          setActiveCycleId(nextCycleId);
           ensureCycleMeta();
           setConfirmError("");
           setPhase(PHASES.GENERATION);
@@ -844,6 +850,7 @@ export default function App() {
           }}
         >
           <Generation
+            cycleId={activeCycleId}
             kladblok={intake?.kladblok}
             doelgroep={intake?.doelgroep}
             intentie={intake?.intentie}

@@ -70,7 +70,7 @@ export default function CoinsGate({ onStart }) {
         } else {
           setAction(t("coins.action.paid"));
         }
-        return true;
+        return data;
       } else {
         setError(data?.error || t("coins.error.start"));
         await loadStatus();
@@ -80,12 +80,12 @@ export default function CoinsGate({ onStart }) {
     } finally {
       setLoading(false);
     }
-    return false;
+    return null;
   }
 
   async function startAndContinue() {
-    const ok = await startCycle();
-    if (ok) onStart();
+    const startData = await startCycle();
+    if (startData?.ok) onStart(startData);
   }
 
   const coins = status?.coins ?? 0;
