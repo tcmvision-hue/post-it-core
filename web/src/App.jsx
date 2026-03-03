@@ -332,6 +332,106 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isDownloadRoute) return;
+
+    let cancelled = false;
+
+    async function restoreFromStatus() {
+      try {
+        const user = getUser();
+        const response = await apiFetch("/api/phase4/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (cancelled || !response.ok || !data?.ok) return;
+
+        const cycleIdFromStatus = String(data?.cycleId || "").trim();
+        const confirmedPostId = String(data?.confirmedPostId || "").trim();
+        const activePostId = String(data?.activePostId || confirmedPostId || "").trim();
+
+        if (cycleIdFromStatus) {
+          setActiveCycleId(cycleIdFromStatus);
+        }
+
+        const statusItems = Array.isArray(data?.variants)
+          ? data.variants.filter((entry) => entry && typeof entry === "object")
+          : [];
+        const generationItems = statusItems
+          .filter((entry) => Boolean(entry?.isGeneration))
+          .sort((a, b) => {
+            const ai = Number(a?.generationIndex) || 0;
+            const bi = Number(b?.generationIndex) || 0;
+            return ai - bi;
+          });
+
+        const restoredGenerations = generationItems
+          .map((entry, index) => buildGenerationFromStatusItem(entry, index))
+          .filter(Boolean)
+          .slice(0, 3);
+
+        if (restoredGenerations.length > 0) {
+          setGenerations(restoredGenerations);
+        }
+
+        const restoredVariants = statusItems
+          .map((entry, index) => buildVariantFromStatusItem(entry, index))
+          .filter(Boolean);
+
+        if (restoredVariants.length > 0) {
+          setVariants(restoredVariants);
+          const activeVariant = restoredVariants.find((variant) => String(variant.postId || "") === activePostId);
+          setSelectedVariantId(activeVariant?.id || restoredVariants[0].id);
+        }
+
+        setPostLifecycle((prev) => ({
+          ...prev,
+          id: confirmedPostId || prev.id || "",
+          activeId: activePostId || prev.activeId || "",
+          confirmed: Boolean(data?.confirmed),
+          status: data?.confirmed ? "confirmed" : prev.status,
+          coinsRemaining: data?.coinsRemaining ?? data?.coinsLeft ?? data?.coins ?? prev.coinsRemaining,
+          error: "",
+        }));
+
+        const params = new URLSearchParams(window.location.search || "");
+        const returnTo = String(params.get("return") || "").trim().toLowerCase();
+        const shouldRespectReturnRoute = returnTo === "packages" || returnTo === "coins";
+        if (shouldRespectReturnRoute) return;
+
+        const hasIntake = Boolean(intake?.kladblok || intake?.doelgroep || intake?.intentie || intake?.context);
+
+        if (data?.confirmed) {
+          setPhase(PHASES.FINAL);
+          return;
+        }
+
+        if (cycleIdFromStatus && hasIntake) {
+          setPhase(PHASES.GENERATION);
+          return;
+        }
+
+        if (hasIntake) {
+          setPhase(PHASES.INTAKE);
+        }
+      } catch {
+        // restore is best effort
+      }
+    }
+
+    restoreFromStatus();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    intake,
+    isDownloadRoute,
+  ]);
+
+  useEffect(() => {
     const noScrollPhases = [
       PHASES.WELCOME,
       PHASES.EXPLANATION,
@@ -442,6 +542,66 @@ export default function App() {
       label: base.label || "",
       accent: base.accent || base.label || "",
     };
+  }
+
+  function buildGenerationFromStatusItem(entry, index) {
+    const text = String(entry?.text || "").trim();
+    const postId = String(entry?.id || "").trim();
+    if (!text || !postId) return null;
+    const generationIndex = Number(entry?.generationIndex);
+    const normalizedIndex = Number.isFinite(generationIndex) && generationIndex >= 1
+      ? generationIndex
+      : index + 1;
+    const isOfficial = normalizedIndex === 1;
+    const label = isOfficial ? "Origineel" : `Variant ${normalizedIndex}`;
+    return {
+      text,
+      postId,
+      label,
+      accent: label,
+      kind: isOfficial ? "official" : "generation",
+    };
+  }
+
+  function buildVariantFromStatusItem(entry, index) {
+    const text = String(entry?.text || "").trim();
+    const postId = String(entry?.id || "").trim();
+    if (!text || !postId) return null;
+    const optionKey = String(entry?.optionKey || "").trim();
+    const generationIndex = Number(entry?.generationIndex);
+    const isGeneration = Boolean(entry?.isGeneration);
+
+    let label = "Variant";
+    let kind = "generation";
+
+    if (isGeneration) {
+      const normalizedIndex = Number.isFinite(generationIndex) && generationIndex >= 1
+        ? generationIndex
+        : index + 1;
+      const isOfficial = normalizedIndex === 1;
+      label = isOfficial ? "Origineel" : `Variant ${normalizedIndex}`;
+      kind = isOfficial ? "official" : "generation";
+    } else if (optionKey === "language") {
+      label = "Taalvariant";
+      kind = "language";
+    } else if (optionKey === "tone") {
+      label = "Toonvariant";
+      kind = "tone";
+    } else if (optionKey === "rephrase") {
+      label = "Herformulering";
+      kind = "rephrase";
+    }
+
+    return createVariant(
+      {
+        text,
+        postId,
+        label,
+        accent: label,
+        kind,
+      },
+      "generation"
+    );
   }
 
   async function syncLifecycleFromStatus() {
@@ -896,6 +1056,10 @@ export default function App() {
             onConfirm={(post) => confirmSelection(post)}
             onReview={() => setPhase(PHASES.SELECT)}
             confirming={confirming}
+            onServerGenerationSync={(serverCount) => {
+              if (!Number.isFinite(serverCount)) return;
+              setGenerations((prev) => (prev.length > serverCount ? prev.slice(0, serverCount) : prev));
+            }}
           />
         </div>
 
@@ -945,6 +1109,8 @@ export default function App() {
         }
         cycleMeta={cycleMeta}
         onViewPackages={() => setPhase(PHASES.PACKAGES)}
+        cycleId={activeCycleId}
+        confirmedPostId={postLifecycle.confirmed ? (postLifecycle.id || "") : ""}
         activePostId={postLifecycle.activeId || postLifecycle.id || ""}
         onFinishSession={() => {
           clearStoredIntake();
@@ -956,8 +1122,19 @@ export default function App() {
             }
           }
           setCycleMeta(null);
+          setActiveCycleId("");
+          setGenerations([]);
+          setHashtags([]);
           setVariants([]);
           setSelectedVariantId("");
+          setPostLifecycle({
+            id: "",
+            activeId: "",
+            status: "idle",
+            error: "",
+            confirmed: false,
+            coinsRemaining: null,
+          });
           setPhase(PHASES.FINISHED);
         }}
       />
@@ -969,13 +1146,15 @@ export default function App() {
     return (
       <Phase4Options
         post={
-          variants.find((variant) => variant.postId
+          variants.find((variant) => variant.id === selectedVariantId)?.text
+          || variants.find((variant) => variant.postId
             && variant.postId === (postLifecycle.activeId || postLifecycle.id))
             ?.text
-          || variants.find((variant) => variant.id === selectedVariantId)?.text
           || variants[0]?.text
           || ""
         }
+        cycleId={activeCycleId}
+        confirmedPostId={postLifecycle.confirmed ? (postLifecycle.id || "") : ""}
         activePostId={postLifecycle.confirmed
           ? (postLifecycle.activeId || postLifecycle.id)
           : ""}
@@ -993,6 +1172,10 @@ export default function App() {
           );
           setVariants((prev) => [...prev, preparedVariant]);
           setSelectedVariantId(preparedVariant.id);
+          setPostLifecycle((prev) => ({
+            ...prev,
+            activeId: String(preparedVariant.postId || prev.activeId || ""),
+          }));
           setHashtags([]);
         }}
         onHashtagsUpdate={(next) => setHashtags(next || [])}
@@ -1003,7 +1186,7 @@ export default function App() {
 
   /* EINDSCHERM */
   if (phase === PHASES.FINISHED) {
-    return <Finished onDone={() => setPhase(PHASES.WELCOME)} />;
+    return <Finished onDone={() => setPhase(PHASES.TODAY)} />;
   }
 
   return null;

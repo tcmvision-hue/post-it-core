@@ -14,6 +14,8 @@ import { useI18n } from "../../i18n/I18nContext";
 
 export default function Phase4Options({
   post,
+  cycleId,
+  confirmedPostId,
   activePostId,
   hashtags,
   onVariantAdd,
@@ -27,6 +29,7 @@ export default function Phase4Options({
   const [tone, setTone] = useState("");
   const [coins, setCoins] = useState(null);
   const [statusConfirmedPostId, setStatusConfirmedPostId] = useState("");
+  const [statusCycleId, setStatusCycleId] = useState("");
   const [outputLanguage, setOutputLanguage] = useState("en");
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState("");
@@ -101,6 +104,7 @@ export default function Phase4Options({
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.ok) {
         setCoins(data?.coins ?? data?.coinsLeft ?? data?.coinsRemaining ?? 0);
+        setStatusCycleId(String(data?.cycleId || ""));
         setStatusConfirmedPostId(String(data?.confirmedPostId || ""));
         if (data?.paymentReconciled) {
           clearPendingPaymentId();
@@ -124,7 +128,13 @@ export default function Phase4Options({
         return;
       }
 
-      const effectiveActivePostId = String(activePostId || statusConfirmedPostId || "");
+      const effectiveCycleId = String(cycleId || statusCycleId || "").trim();
+      if (!effectiveCycleId) {
+        setError("Cycle niet gestart. Start opnieuw.");
+        return;
+      }
+
+      const effectiveActivePostId = String(activePostId || confirmedPostId || statusConfirmedPostId || "");
       if (!effectiveActivePostId) {
         setError(t("phase4.error.missingPost"));
         return;
@@ -142,14 +152,18 @@ export default function Phase4Options({
 
       const user = getUser();
       const actionId = createActionId(`option-${optionKey}`);
-      const res = await apiFetch("/api/phase4/option", {
+      const endpoint = optionKey === "language"
+        ? "/api/phase4/translate"
+        : "/api/phase4/option";
+      const res = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
+          cycleId: effectiveCycleId,
           postId: effectiveActivePostId,
-          optionKey,
           post,
+          optionKey,
           tone: optionKey === "tone" ? tone : undefined,
           targetLanguage: optionKey === "language" ? outputLanguage : undefined,
           actionId,
@@ -184,6 +198,7 @@ export default function Phase4Options({
             data.hashtags.map((tag) => ({ tag, selected: true }))
           );
         }
+        onBack?.();
       } else {
         if (data?.error === "Insufficient coins") {
           setError(t("coins.note.lock"));

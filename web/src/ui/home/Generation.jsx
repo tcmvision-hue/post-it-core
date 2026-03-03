@@ -19,12 +19,16 @@ export default function Generation({
   onConfirm,
   _onReview,
   confirming,
+  onServerGenerationSync,
 }) {
   void _onReview;
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [keywords, setKeywords] = useState("");
   const [error, setError] = useState("");
+  const [serverGenerationCount, setServerGenerationCount] = useState(
+    Array.isArray(generations) ? generations.length : 0
+  );
 
   function createActionId(prefix) {
     return `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
@@ -34,6 +38,11 @@ export default function Generation({
   const currentPost = generations[generationCount - 1] ?? null;
   const currentText = currentPost?.text || "";
   const currentLabel = currentPost?.label || "";
+  const effectiveGenerationCount = Math.max(serverGenerationCount, generationCount);
+
+  useEffect(() => {
+    setServerGenerationCount((previous) => Math.max(previous, generationCount));
+  }, [generationCount]);
 
   // Auto-start eerste generatie
   useEffect(() => {
@@ -66,12 +75,35 @@ export default function Generation({
 
   async function runGeneration() {
     if (loading || confirming) return;
-    if (generationCount >= 3) {
+    const user = getUser();
+    let statusGenerationCount = effectiveGenerationCount;
+    let statusCycleId = "";
+    try {
+      const statusRes = await apiFetch("/api/phase4/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const statusData = await statusRes.json().catch(() => ({}));
+      if (statusRes.ok && statusData?.ok) {
+        const syncedCount = Number(statusData?.currentGenerationCount);
+        if (Number.isFinite(syncedCount) && syncedCount >= 0) {
+          statusGenerationCount = syncedCount;
+          setServerGenerationCount(syncedCount);
+          onServerGenerationSync?.(syncedCount);
+        }
+        statusCycleId = String(statusData?.cycleId || "").trim();
+      }
+    } catch {
+      // fallback to local count
+    }
+
+    if (statusGenerationCount >= 3) {
       setError("Regenerate limit reached");
       return;
     }
-    const user = getUser();
-    const activeCycleId = await resolveCycleId(user.id);
+
+    const activeCycleId = statusCycleId || (await resolveCycleId(user.id));
     if (!activeCycleId) {
       setError("Cycle niet gestart. Start opnieuw.");
       return;
@@ -98,6 +130,17 @@ export default function Generation({
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.ok && data?.post && data?.postId) {
+        const nextServerCount = Number(
+          data?.currentGenerationCount
+          ?? data?.generationIndex
+          ?? (statusGenerationCount + 1)
+        );
+        const normalizedNextCount = Number.isFinite(nextServerCount)
+          ? Math.max(0, nextServerCount)
+          : statusGenerationCount + 1;
+        setServerGenerationCount(normalizedNextCount);
+        onServerGenerationSync?.(normalizedNextCount);
+
         const generatedPost = {
           text: data.post,
           postId: data.postId,
@@ -105,12 +148,12 @@ export default function Generation({
           coinsRemaining: data.coinsRemaining,
           label: keywords.trim(),
           accent: keywords.trim(),
-          kind: generationCount === 0 ? "official" : "generation",
+          kind: statusGenerationCount === 0 ? "official" : "generation",
         };
 
         onGenerate(generatedPost);
 
-        if (generationCount + 1 >= 3) {
+        if (normalizedNextCount >= 3) {
           onConfirm(generatedPost);
         }
       } else {
@@ -141,7 +184,7 @@ export default function Generation({
         <div style={styles.card}>
           <h2 style={{ marginTop: 0, marginBottom: 8 }}>
             {t("generation.title", {
-              current: Math.max(1, generationCount),
+              current: Math.max(1, effectiveGenerationCount),
               max: 3,
             })}
           </h2>
@@ -182,7 +225,7 @@ export default function Generation({
           {loading && currentPost && <p style={{ marginTop: 10 }}>{t("generation.loading")}</p>}
 
           <div style={styles.actions}>
-            {currentPost && generationCount < 3 && (
+            {currentPost && effectiveGenerationCount < 3 && (
               <button
                 style={styles.button(loading || confirming)}
                 onClick={runGeneration}
@@ -192,7 +235,7 @@ export default function Generation({
               </button>
             )}
 
-            {currentPost && generationCount > 0 && (
+            {currentPost && effectiveGenerationCount > 0 && (
               <button
                 style={styles.button(loading || confirming)}
                 onClick={() => onConfirm(currentPost)}

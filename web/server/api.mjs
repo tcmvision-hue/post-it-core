@@ -621,6 +621,48 @@ function createCycle(userId, postNumber) {
   };
 }
 
+function isGenerationItem(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  if (Number.isFinite(Number(entry.generationIndex)) && Number(entry.generationIndex) >= 1) {
+    return true;
+  }
+  const id = String(entry.id || "").trim();
+  return /-p\d+$/i.test(id);
+}
+
+function getGenerationItems(cycle) {
+  if (!cycle || !Array.isArray(cycle.generatedItems)) return [];
+  return cycle.generatedItems.filter((entry) => isGenerationItem(entry));
+}
+
+function getCurrentGenerationCount(cycle) {
+  return getGenerationItems(cycle).length;
+}
+
+function serializeCycleItems(cycle) {
+  if (!cycle || !Array.isArray(cycle.generatedItems)) return [];
+  return cycle.generatedItems
+    .map((entry) => {
+      const id = String(entry?.id || "").trim();
+      const text = String(entry?.text || "").trim();
+      if (!id || !text) return null;
+      const generationIndex = Number(entry?.generationIndex);
+      const normalizedGenerationIndex = Number.isFinite(generationIndex)
+        ? generationIndex
+        : null;
+      return {
+        id,
+        text,
+        optionKey: entry?.optionKey ? String(entry.optionKey) : null,
+        sourcePostId: entry?.sourcePostId ? String(entry.sourcePostId) : null,
+        generationIndex: normalizedGenerationIndex,
+        isGeneration: isGenerationItem(entry),
+        createdAt: Number(entry?.createdAt) || null,
+      };
+    })
+    .filter(Boolean);
+}
+
 function appendOptionVariant(cycle, { postText, sourcePostId, optionKey }) {
   if (!cycle || typeof cycle !== "object") return "";
   if (!Array.isArray(cycle.generatedPosts)) {
@@ -958,7 +1000,7 @@ function hydrateFromStateCookie(req, store, userId) {
       || cookieStartedAt > existingStartedAt
       || (
         cookieStartedAt === existingStartedAt
-        && Boolean(state.cycle.confirmed)
+        && state.cycle.confirmed
         && !existing.confirmed
       )
       || (
@@ -966,8 +1008,8 @@ function hydrateFromStateCookie(req, store, userId) {
         && (
           cookieGenerationIndex > existingGenerationIndex
           || cookieRegenerateCount > existingRegenerateCount
-          || (Boolean(state.cycle.confirmedPostId) && !Boolean(existing?.confirmedPostId))
-          || (Boolean(state.cycle.activePostId) && !Boolean(existing?.activePostId))
+          || (state.cycle.confirmedPostId && !existing?.confirmedPostId)
+          || (state.cycle.activePostId && !existing?.activePostId)
         )
       );
     if (shouldApplyCookieCycle) {
@@ -1197,9 +1239,12 @@ app.post("/api/phase4/status", async (req, res) => {
       }
       const { user } = hydrateFromStateCookie(req, store, userId);
       const cycle = getCycle(store, userId);
+      const currentGenerationCount = getCurrentGenerationCount(cycle);
+      const generationLimit = 3;
       const postNumNext = user.postCountToday + 1;
       const daySlotUsed = isDaySlotUsed(user);
       const costToStart = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
+      const cycleItems = serializeCycleItems(cycle);
       return {
         ok: true,
         coins: user.coins,
@@ -1213,6 +1258,11 @@ app.post("/api/phase4/status", async (req, res) => {
         daySlotUsed,
         costToStart,
         extraGenerationCost: areCoinBlocksDisabled() ? 0 : 1,
+        currentGenerationCount,
+        maxGenerationCount: generationLimit,
+        canRegenerate: currentGenerationCount < generationLimit,
+        regeneratesRemaining: Math.max(0, generationLimit - currentGenerationCount),
+        variants: cycleItems,
         paymentReconciled,
         __cookieState: { user, cycle },
       };
@@ -1238,6 +1288,22 @@ app.post("/api/phase4/start", async (req, res) => {
 
     const result = await withStore((store) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
+      const existingCycle = getCycle(store, userId);
+      if (existingCycle && !existingCycle.confirmed) {
+        return {
+          ok: true,
+          cycleId: existingCycle.id,
+          postNumber: existingCycle.postNumber || (user.postCountToday + 1),
+          costToStart: Number(existingCycle.startCostCharged) || 0,
+          daySlotUsed: isDaySlotUsed(user),
+          coinsLeft: Number(user.coins) || 0,
+          coinsRemaining: Number(user.coins) || 0,
+          confirmed: false,
+          resumed: true,
+          __cookieState: { user, cycle: existingCycle },
+        };
+      }
+
       const daySlotUsed = isDaySlotUsed(user);
       const costToStart = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
 
@@ -1266,7 +1332,7 @@ app.post("/api/phase4/start", async (req, res) => {
       }
 
       if (costToStart > 0) {
-        user.coins -= costToStart;
+        user.coins = Math.max(0, Number(user.coins || 0) - costToStart);
       }
       cycle.startCostCharged = costToStart;
 
@@ -1427,7 +1493,7 @@ app.post("/api/phase4/option", async (req, res) => {
         };
       }
 
-      user.coins -= effectiveCost;
+      user.coins = Math.max(0, Number(user.coins || 0) - effectiveCost);
 
       return {
         ok: true,
@@ -1466,13 +1532,22 @@ app.post("/api/phase4/option", async (req, res) => {
         optionKey,
       }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
       if (activeCycle) {
+        activeCycle.activePostId = variantPostId;
+      }
+      if (activeCycle) {
         setCycleActionResult(activeCycle, actionId, {
           ...result,
+          activePostId: variantPostId,
           postId: variantPostId,
           post: rewritten,
         });
       }
-      return sendOptionResponse({ ...result, postId: variantPostId, post: rewritten });
+      return sendOptionResponse({
+        ...result,
+        postId: variantPostId,
+        activePostId: variantPostId,
+        post: rewritten,
+      });
     }
 
     if (optionKey === "rephrase") {
@@ -1483,13 +1558,22 @@ app.post("/api/phase4/option", async (req, res) => {
         optionKey,
       }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
       if (activeCycle) {
+        activeCycle.activePostId = variantPostId;
+      }
+      if (activeCycle) {
         setCycleActionResult(activeCycle, actionId, {
           ...result,
+          activePostId: variantPostId,
           postId: variantPostId,
           post: rewritten,
         });
       }
-      return sendOptionResponse({ ...result, postId: variantPostId, post: rewritten });
+      return sendOptionResponse({
+        ...result,
+        postId: variantPostId,
+        activePostId: variantPostId,
+        post: rewritten,
+      });
     }
 
     if (optionKey === "language") {
@@ -1504,13 +1588,22 @@ app.post("/api/phase4/option", async (req, res) => {
         optionKey,
       }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
       if (activeCycle) {
+        activeCycle.activePostId = variantPostId;
+      }
+      if (activeCycle) {
         setCycleActionResult(activeCycle, actionId, {
           ...result,
+          activePostId: variantPostId,
           postId: variantPostId,
           post: rewritten,
         });
       }
-      return sendOptionResponse({ ...result, postId: variantPostId, post: rewritten });
+      return sendOptionResponse({
+        ...result,
+        postId: variantPostId,
+        activePostId: variantPostId,
+        post: rewritten,
+      });
     }
 
     if (optionKey === "hashtags") {
@@ -1531,6 +1624,175 @@ app.post("/api/phase4/option", async (req, res) => {
   }
 });
 
+
+app.post("/api/phase4/translate", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const userId = resolveUserId(req, payload.userId);
+    const cycleId = String(payload.cycleId || "").trim();
+    const postId = String(payload.postId || "").trim();
+    const post = payload.post;
+    const actionId = normalizeActionId(payload.actionId);
+    const targetLanguageRaw =
+      payload.targetLanguage ?? payload.outputLanguage ?? payload.language;
+
+    if (!userId) {
+      return res.status(400).json({ ok: false, error: "Missing userId" });
+    }
+    if (!cycleId) {
+      return res.status(400).json({ ok: false, error: "Missing cycleId" });
+    }
+    if (!postId) {
+      return res.status(400).json({ ok: false, error: "Missing postId" });
+    }
+    if (!post || typeof post !== "string") {
+      return res.status(400).json({ ok: false, error: "Missing post" });
+    }
+    if (!targetLanguageRaw || typeof targetLanguageRaw !== "string") {
+      return res.status(400).json({ ok: false, error: "Missing targetLanguage" });
+    }
+    if (!isSupportedOutputLanguage(targetLanguageRaw)) {
+      return res.status(400).json({ ok: false, error: "Invalid targetLanguage" });
+    }
+
+    const targetLanguage = normalizeOutputLanguage(targetLanguageRaw, "en");
+    const cost = areCoinBlocksDisabled() ? 0 : 3;
+
+    const result = await withStore((store) => {
+      const { user } = hydrateFromStateCookie(req, store, userId);
+      const cycle = getCycle(store, userId);
+
+      if (!cycle) {
+        return {
+          ok: false,
+          error: "Cycle not started",
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (String(cycle.id || "") !== cycleId) {
+        return {
+          ok: false,
+          error: "Invalid cycleId",
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (!cycle.confirmed) {
+        return {
+          ok: false,
+          error: "No confirmed post",
+          confirmed: false,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (actionId) {
+        const cached = ensureCycleActionResults(cycle)[actionId];
+        if (cached && cached.ok) {
+          const cachedPayload = { ...cached };
+          delete cachedPayload._ts;
+          return {
+            ...cachedPayload,
+            idempotentReplay: true,
+            __cookieState: { user, cycle },
+          };
+        }
+      }
+
+      const activePostId = String(cycle.activePostId || cycle.confirmedPostId || "");
+      if (!activePostId || activePostId !== postId) {
+        return {
+          ok: false,
+          error: "Post not active",
+          confirmed: true,
+          postId: activePostId || postId,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
+
+      if (user.coins < cost) {
+        return {
+          ok: false,
+          error: "Insufficient coins",
+          coins: user.coins,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+          cost,
+          confirmed: true,
+          postId,
+        };
+      }
+
+      if (cost > 0) {
+        user.coins = Math.max(0, Number(user.coins || 0) - cost);
+      }
+
+      return {
+        ok: true,
+        postId,
+        sourcePostId: postId,
+        cost,
+        debitedFor: "language",
+        coinsLeft: user.coins,
+        coinsRemaining: user.coins,
+        confirmed: true,
+        __cookieState: { user, cycle },
+      };
+    });
+
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+
+    const cookieState = result.__cookieState || {};
+    const activeUser = cookieState.user || null;
+    const activeCycle = cookieState.cycle || null;
+    delete result.__cookieState;
+
+    const translated = await rewritePost({
+      post,
+      mode: "language",
+      targetLanguage,
+    });
+    const variantPostId = appendOptionVariant(activeCycle, {
+      postText: translated,
+      sourcePostId: result.sourcePostId,
+      optionKey: "language",
+    }) || `${result.sourcePostId || userId}-o${Date.now().toString(36)}`;
+
+    if (activeCycle) {
+      activeCycle.activePostId = variantPostId;
+    }
+
+    if (activeCycle) {
+      setCycleActionResult(activeCycle, actionId, {
+        ...result,
+        activePostId: variantPostId,
+        postId: variantPostId,
+        post: translated,
+        targetLanguage,
+      });
+    }
+
+    setUserCookie(res, userId);
+    writeStateCookie(res, userId, activeUser, activeCycle);
+    return res.json({
+      ...result,
+      activePostId: variantPostId,
+      postId: variantPostId,
+      post: translated,
+      targetLanguage,
+    });
+  } catch (err) {
+    console.error("Phase4 translate error:", err);
+    return res.status(500).json({ ok: false, error: "Translate failed" });
+  }
+});
 
 app.post("/api/phase4/checkout", async (req, res) => {
   try {
@@ -1719,8 +1981,6 @@ app.post("/api/generate", async (req, res) => {
     const intentie = payload.intentie;
     const context = payload.context;
     const keywords = payload.keywords;
-    const outputLanguageRaw =
-      payload.outputLanguage ?? payload.language ?? payload.targetLanguage;
     const actionId = normalizeActionId(payload.actionId);
 
     const userId = resolveUserId(req, payload.userId);
@@ -1772,18 +2032,27 @@ app.post("/api/generate", async (req, res) => {
       const primaryLanguage = normalizeOutputLanguage(user.primary_language, "en");
       const resolvedOutputLanguage = primaryLanguage;
 
-      if (typeof cycle.regenerateCount !== "number") {
-        cycle.regenerateCount = 0;
+      if (!Array.isArray(cycle.generatedPosts)) {
+        cycle.generatedPosts = [];
       }
 
-      const isRegenerateAttempt = cycle.generationIndex >= 1;
-      if (isRegenerateAttempt && cycle.regenerateCount >= 2) {
+      if (!Array.isArray(cycle.generatedItems)) {
+        cycle.generatedItems = [];
+      }
+
+      const currentGenerationCount = getCurrentGenerationCount(cycle);
+      const generationLimit = 3;
+      if (currentGenerationCount >= generationLimit) {
         return {
           ok: false,
           statusCode: 429,
           exactLimitError: true,
+          currentGenerationCount,
+          maxGenerationCount: generationLimit,
         };
       }
+
+      const isRegenerateAttempt = currentGenerationCount >= 1;
 
       const generationCost = 0;
       const languageCost = 0;
@@ -1801,26 +2070,16 @@ app.post("/api/generate", async (req, res) => {
       }
 
       if (totalCost > 0) {
-        user.coins -= totalCost;
-      }
-
-      if (!Array.isArray(cycle.generatedPosts)) {
-        cycle.generatedPosts = [];
-      }
-
-      if (!Array.isArray(cycle.generatedItems)) {
-        cycle.generatedItems = [];
+        user.coins = Math.max(0, Number(user.coins || 0) - totalCost);
       }
 
       const priorVariants = cycle.generatedPosts
         .filter((item) => typeof item === "string" && item.trim().length > 0)
         .slice(-8);
 
-      cycle.generationIndex += 1;
-      cycle.variantCount += 1;
-      if (isRegenerateAttempt) {
-        cycle.regenerateCount += 1;
-      }
+      const nextGenerationIndex = currentGenerationCount + 1;
+      const regenerateCount = Math.max(0, nextGenerationIndex - 1);
+      const regeneratesRemaining = Math.max(0, generationLimit - nextGenerationIndex);
 
       return {
         ok: true,
@@ -1830,9 +2089,12 @@ app.post("/api/generate", async (req, res) => {
         coinsLeft: user.coins,
         primaryLanguage,
         resolvedOutputLanguage,
-        generationIndex: cycle.generationIndex,
-        regenerateCount: cycle.regenerateCount,
-        regeneratesRemaining: Math.max(0, 2 - cycle.regenerateCount),
+        generationIndex: nextGenerationIndex,
+        currentGenerationCount,
+        maxGenerationCount: generationLimit,
+        regenerateCount,
+        regeneratesRemaining,
+        isRegenerateAttempt,
         priorVariants,
         postNumber: cycle.postNumber,
         confirmed: Boolean(cycle.confirmed),
@@ -1903,13 +2165,30 @@ app.post("/api/generate", async (req, res) => {
         cycle.generatedItems = [];
       }
 
+      const committedGenerationCount = getCurrentGenerationCount(cycle);
+      const committedGenerationIndex = committedGenerationCount + 1;
+      if (committedGenerationIndex > 3) {
+        return;
+      }
+
       cycle.generatedPosts.push(result.post);
       cycle.generatedItems.push({
-        id: postId,
+        id: `${cycle.id || userId}-p${committedGenerationIndex}`,
         text: result.post,
-        generationIndex: generationAccess.generationIndex,
+        generationIndex: committedGenerationIndex,
         createdAt: Date.now(),
       });
+
+      cycle.generationIndex = committedGenerationIndex;
+      cycle.variantCount = (Number(cycle.variantCount) || 0) + 1;
+      cycle.regenerateCount = Math.max(0, committedGenerationIndex - 1);
+
+      responsePayload.postId = `${cycle.id || userId}-p${committedGenerationIndex}`;
+      responsePayload.generationIndex = committedGenerationIndex;
+      responsePayload.currentGenerationCount = committedGenerationIndex;
+      responsePayload.maxGenerationCount = 3;
+      responsePayload.regenerateCount = Math.max(0, committedGenerationIndex - 1);
+      responsePayload.regeneratesRemaining = Math.max(0, 3 - committedGenerationIndex);
 
       if (actionId) {
         setCycleActionResult(cycle, actionId, responsePayload);
@@ -2029,7 +2308,7 @@ app.post("/api/phase4/confirm", async (req, res) => {
       }
 
       if (cost > 0) {
-        user.coins -= cost;
+        user.coins = Math.max(0, Number(user.coins || 0) - cost);
       }
 
       if (cost === 0) {
@@ -2214,7 +2493,7 @@ app.post("/api/phase4/download-variant", async (req, res) => {
       }
 
       if (cost > 0) {
-        user.coins -= cost;
+        user.coins = Math.max(0, Number(user.coins || 0) - cost);
       }
 
       if (!isActiveVariant) {
