@@ -45,3 +45,22 @@ bash scripts/canon-smoke-prod.sh https://post-it-core.vercel.app
 ```
 
 Verwachte output: `PASS1` t/m `PASS5` en daarna `[canon] ALL PASS`.
+
+## Canon release marker (2026-02-27)
+- Canon branch: `restore-pass-5of5`
+- Canon tag: `canon-hardened-all-pass-2026-02-27-v2`
+
+Smoke check:
+
+```bash
+cd /workspaces/post-it-core/web
+bash scripts/canon-smoke-prod.sh http://127.0.0.1:3001
+```
+
+Rollback naar bewezen canon state:
+
+```bash
+cd /workspaces/post-it-core
+git fetch --all --prune
+git checkout -B rollback-canon canon-hardened-all-pass-2026-02-27-v2
+```

@@ -14,6 +14,8 @@ export default function Output({
   onToggleHashtag,
   cycleMeta,
   onViewPackages,
+  cycleId,
+  confirmedPostId: confirmedPostIdProp,
   activePostId,
   onFinishSession,
 }) {
@@ -22,6 +24,7 @@ export default function Output({
   const [downloadLoading, setDownloadLoading] = useState("");
   const [confirmedPostId, setConfirmedPostId] = useState("");
   const [statusActivePostId, setStatusActivePostId] = useState("");
+  const [statusCycleId, setStatusCycleId] = useState("");
 
   const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
   const isMobile = /android|iphone|ipad|ipod/i.test(userAgent);
@@ -40,8 +43,12 @@ export default function Output({
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (res.ok && data?.ok) {
+          const cycleFromStatus = String(data?.cycleId || "");
           const confirmedId = String(data?.confirmedPostId || "");
           const activeId = String(data?.activePostId || confirmedId || "");
+          if (cycleFromStatus) {
+            setStatusCycleId(cycleFromStatus);
+          }
           if (confirmedId) {
             setConfirmedPostId(confirmedId);
           }
@@ -366,18 +373,27 @@ export default function Output({
     try {
       const user = getUser();
       const actionId = createActionId("download");
+      const effectiveCycleId = String(cycleId || statusCycleId || "").trim();
+      const effectiveConfirmedPostId = String(
+        confirmedPostIdProp || confirmedPostId || ""
+      ).trim();
+      const effectiveActivePostId = String(statusActivePostId || activePostId || effectiveConfirmedPostId || "").trim();
       const requestedPostId = String(
         variant?.postId
-        || statusActivePostId
-        || activePostId
-        || confirmedPostId
+        || effectiveActivePostId
         || ""
       );
+      if (!effectiveCycleId || !effectiveConfirmedPostId) {
+        setDownloadError(t("output.download.error"));
+        return;
+      }
       let res = await apiFetch("/api/phase4/download-variant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
+          cycleId: effectiveCycleId,
+          confirmedPostId: effectiveConfirmedPostId,
           postId: requestedPostId,
           isOfficial: variant?.kind === "official",
           actionId,
@@ -392,17 +408,22 @@ export default function Output({
           body: JSON.stringify({ userId: user.id }),
         });
         const statusData = await statusRes.json().catch(() => ({}));
-        const retryPostId = String(statusData?.activePostId || statusData?.confirmedPostId || "");
+        const retryCycleId = String(statusData?.cycleId || effectiveCycleId || "");
+        const retryConfirmedPostId = String(statusData?.confirmedPostId || effectiveConfirmedPostId || "");
+        const retryActivePostId = String(statusData?.activePostId || statusData?.confirmedPostId || "");
 
-        if (statusRes.ok && statusData?.ok && retryPostId) {
-          setConfirmedPostId(retryPostId);
-          setStatusActivePostId(retryPostId);
+        if (statusRes.ok && statusData?.ok && retryCycleId && retryConfirmedPostId && retryActivePostId) {
+          setConfirmedPostId(retryConfirmedPostId);
+          setStatusActivePostId(retryActivePostId);
+          setStatusCycleId(retryCycleId);
           res = await apiFetch("/api/phase4/download-variant", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               userId: user.id,
-              postId: retryPostId,
+              cycleId: retryCycleId,
+              confirmedPostId: retryConfirmedPostId,
+              postId: retryActivePostId,
               isOfficial: true,
               actionId: createActionId("download-retry"),
             }),
@@ -550,7 +571,7 @@ export default function Output({
                         }}
                       >
                         {String(variant?.postId || "")
-                          === String(statusActivePostId || activePostId || confirmedPostId || "")
+                          === String(confirmedPostIdProp || confirmedPostId || "")
                           ? t("output.download.free")
                           : t("output.download.paid")}
                       </button>
