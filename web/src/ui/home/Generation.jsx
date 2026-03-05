@@ -9,6 +9,7 @@ import { useI18n } from "../../i18n/I18nContext";
 export default function Generation({
   cycleId,
   onCycleIdRecovered,
+  outputLanguage,
   kladblok,
   doelgroep,
   intentie,
@@ -119,6 +120,7 @@ export default function Generation({
         body: JSON.stringify({
           userId: user.id,
           cycleId: activeCycleId,
+          outputLanguage,
           kladblok,
           doelgroep,
           intentie,

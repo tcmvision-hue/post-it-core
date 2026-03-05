@@ -1035,6 +1035,7 @@ export default function App() {
           <Generation
             cycleId={activeCycleId}
             onCycleIdRecovered={setActiveCycleId}
+            outputLanguage={outputLanguage}
             kladblok={intake?.kladblok}
             doelgroep={intake?.doelgroep}
             intentie={intake?.intentie}
@@ -1066,6 +1067,7 @@ export default function App() {
 
         {/* Reflection bovenop */}
         <Reflection
+          canFadeOut={generations.length > 0}
           onFadeOutStart={() => {
             // ⬅️ BELANGRIJK: generatie zichtbaar TIJDENS fade
             setShowGeneration(true);

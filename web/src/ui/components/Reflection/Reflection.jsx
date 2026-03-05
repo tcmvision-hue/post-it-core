@@ -19,13 +19,14 @@ const FADE_IN_DURATION = 1200;
 const FADE_OUT_DURATION = 1500;
 const LOGO_DELAY = FRAME_DURATION * 2;
 
-export default function Reflection({ onFadeOutStart, onDone }) {
+export default function Reflection({ onFadeOutStart, onDone, canFadeOut = false }) {
   const { t } = useI18n();
   const [frameIndex, setFrameIndex] = useState(0);
   const [visible, setVisible] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
   const [logoVisible, setLogoVisible] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [minDurationReached, setMinDurationReached] = useState(false);
 
   const frameCount = REFLECTION_FRAMES.length;
   const playDuration = MIN_STEPS * FRAME_DURATION;
@@ -58,16 +59,10 @@ export default function Reflection({ onFadeOutStart, onDone }) {
       if (steps >= MIN_STEPS) clearInterval(interval);
     }, FRAME_DURATION);
 
-    // Fade-out start
-    const fadeOutTimer = setTimeout(() => {
-      setFadingOut(true);
-      onFadeOutStart && onFadeOutStart(); // ⬅️ CRUCIAAL
+    // Minimum reflection duration before fade-out is allowed.
+    const minDurationTimer = setTimeout(() => {
+      setMinDurationReached(true);
     }, playDuration);
-
-    // Einde (na fade-out)
-    const doneTimer = setTimeout(() => {
-      onDone && onDone();
-    }, playDuration + FADE_OUT_DURATION);
 
     return () => {
       if (media.removeEventListener) {
@@ -77,11 +72,22 @@ export default function Reflection({ onFadeOutStart, onDone }) {
       }
       clearTimeout(fadeInTimer);
       clearTimeout(logoTimer);
-      clearTimeout(fadeOutTimer);
-      clearTimeout(doneTimer);
+      clearTimeout(minDurationTimer);
       clearInterval(interval);
     };
-  }, [onFadeOutStart, onDone, frameCount, playDuration]);
+  }, [frameCount, playDuration]);
+
+  useEffect(() => {
+    if (!minDurationReached || !canFadeOut || fadingOut) return;
+    setFadingOut(true);
+    onFadeOutStart && onFadeOutStart();
+
+    const doneTimer = setTimeout(() => {
+      onDone && onDone();
+    }, FADE_OUT_DURATION);
+
+    return () => clearTimeout(doneTimer);
+  }, [minDurationReached, canFadeOut, fadingOut, onFadeOutStart, onDone]);
 
   return (
     <div

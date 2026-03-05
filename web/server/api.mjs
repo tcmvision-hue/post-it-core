@@ -1981,6 +1981,7 @@ app.post("/api/generate", async (req, res) => {
     const intentie = payload.intentie;
     const context = payload.context;
     const keywords = payload.keywords;
+    const requestedOutputLanguage = String(payload.outputLanguage || "").trim();
     const actionId = normalizeActionId(payload.actionId);
 
     const userId = resolveUserId(req, payload.userId);
@@ -2030,7 +2031,17 @@ app.post("/api/generate", async (req, res) => {
       }
 
       const primaryLanguage = normalizeOutputLanguage(user.primary_language, "en");
-      const resolvedOutputLanguage = primaryLanguage;
+      const normalizedRequestedLanguage = normalizeOutputLanguage(
+        requestedOutputLanguage,
+        ""
+      );
+      const resolvedOutputLanguage = isSupportedOutputLanguage(normalizedRequestedLanguage)
+        ? normalizedRequestedLanguage
+        : primaryLanguage;
+
+      if (resolvedOutputLanguage && user.primary_language !== resolvedOutputLanguage) {
+        user.primary_language = resolvedOutputLanguage;
+      }
 
       if (!Array.isArray(cycle.generatedPosts)) {
         cycle.generatedPosts = [];
