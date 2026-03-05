@@ -413,7 +413,8 @@ export default function App() {
         }
 
         if (hasIntake) {
-          setPhase(PHASES.INTAKE);
+          // Intake is complete but cycle not started yet: resume at coins gate.
+          setPhase(PHASES.COINS);
         }
       } catch {
         // restore is best effort
