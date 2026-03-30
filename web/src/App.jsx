@@ -795,7 +795,7 @@ export default function App() {
   if (phase === PHASES.INTAKE) {
     return (
       <Intake
-        onComplete={(data) => {
+        onComplete={async (data) => {
           storeIntake(data);
           setIntake(data);
           setGenerations([]);
@@ -813,7 +813,7 @@ export default function App() {
             confirmed: false,
             coinsRemaining: null,
           });
-          setPhase(PHASES.COINS);
+          setPhase(PHASES.GENERATION);
         }}
       />
     );

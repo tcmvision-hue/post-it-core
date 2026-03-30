@@ -1554,30 +1554,11 @@ app.post("/api/generate", async (req, res) => {
       const { user } = hydrateFromStateCookie(req, store, userId);
       let cycle = getCycle(store, userId);
 
+      // Always allow generation, never block for coins
       if (!cycle) {
-        const daySlotUsed = isDaySlotUsed(user);
-        const costToStart = areCoinBlocksDisabled() ? 0 : (daySlotUsed ? 1 : 0);
-        if (costToStart > 0 && user.coins < costToStart) {
-          return {
-            ok: false,
-            error: "Insufficient coins",
-            coins: user.coins,
-            coinsRemaining: user.coins,
-            coinsLeft: user.coins,
-            cost: costToStart,
-            confirmed: false,
-          };
-        }
-        if (costToStart > 0) {
-          user.coins -= costToStart;
-        }
-
         const postNumber = user.postCountToday + 1;
         store.cycles[userId] = createCycle(userId, postNumber);
         cycle = getCycle(store, userId);
-        if (cycle) {
-          cycle.startCostCharged = costToStart;
-        }
       }
 
       if (!cycle) {
@@ -1626,26 +1607,6 @@ app.post("/api/generate", async (req, res) => {
         };
       }
 
-      const generationCost = 0;
-      const languageCost = resolvedOutputLanguage === primaryLanguage ? 0 : 3;
-      const totalCost = generationCost + languageCost;
-      if (totalCost > 0 && user.coins < totalCost) {
-        return {
-          ok: false,
-          error: "Insufficient coins",
-          coins: user.coins,
-          coinsRemaining: user.coins,
-          cost: totalCost,
-          primaryLanguage,
-          requestedLanguage: resolvedOutputLanguage,
-          confirmed: Boolean(cycle.confirmed),
-        };
-      }
-
-      if (totalCost > 0) {
-        user.coins -= totalCost;
-      }
-
       if (!Array.isArray(cycle.generatedPosts)) {
         cycle.generatedPosts = [];
       }
@@ -1654,9 +1615,23 @@ app.post("/api/generate", async (req, res) => {
         cycle.generatedItems = [];
       }
 
+      // Store up to 3 variants
       const priorVariants = cycle.generatedPosts
         .filter((item) => typeof item === "string" && item.trim().length > 0)
         .slice(-8);
+
+      if (cycle.generatedItems.length >= 3) {
+        return {
+          ok: false,
+          error: "Regenerate limit reached",
+          confirmed: Boolean(cycle.confirmed),
+          postId: cycle.confirmedPostId || null,
+          regenerateCount: cycle.regenerateCount,
+          regeneratesRemaining: 0,
+          coinsRemaining: user.coins,
+          coinsLeft: user.coins,
+        };
+      }
 
       cycle.generationIndex += 1;
       cycle.variantCount += 1;
@@ -1666,9 +1641,9 @@ app.post("/api/generate", async (req, res) => {
 
       return {
         ok: true,
-        cost: totalCost,
-        generationCost,
-        languageCost,
+        cost: 0,
+        generationCost: 0,
+        languageCost: 0,
         coinsLeft: user.coins,
         primaryLanguage,
         resolvedOutputLanguage,
@@ -1978,9 +1953,14 @@ app.post("/api/phase4/download-variant", async (req, res) => {
       const lastFreeDownloadTs = Date.parse(String(user?.last_free_download_timestamp || ""));
       const freeWindowAvailable = !Number.isFinite(lastFreeDownloadTs)
         || (Date.now() - lastFreeDownloadTs >= MS_24H);
-      const cost = isActiveVariant
-        ? (freeWindowAvailable ? 0 : 1)
-        : 1;
+
+      // If selection not yet made (activePostId not set), all variants are free
+      let cost = 0;
+      if (cycle.confirmed && activePostId) {
+        cost = isActiveVariant
+          ? (freeWindowAvailable ? 0 : 1)
+          : 1;
+      }
 
       if (cost > 0 && user.coins < cost) {
         return {

@@ -11,6 +11,7 @@ export default function SelectPost({ posts, onSelect, confirmError, confirming }
     event.preventDefault();
   }
 
+  // Always show up to 3 variants, never less if available
   const cardPosts = useMemo(
     () => (Array.isArray(posts) ? posts.slice(0, 3) : []),
     [posts]
