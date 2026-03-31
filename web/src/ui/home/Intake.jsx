@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { checkKladblok } from "../../ai/checkKladblok";
 import AudioTranscriber from "../components/AudioTranscriber";
 import VideoBackground from "../../components/VideoBackground";
 import { VIDEO_BG } from "./VideoBackgrounds";
@@ -61,11 +60,7 @@ export default function Intake({ onComplete }) {
 
   const wc = wordCount(kladblok);
   const isTooLong = wc > MAX_WORDS;
-
-  useEffect(() => {
-    const trimmed = kladblok.trim();
-    if (!trimmed) {
-      setKladblokOk(true);
+      setKladblokCheckLoading(false);
       setKladblokCheckLoading(false);
       return;
     }

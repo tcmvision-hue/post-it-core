@@ -14,8 +14,6 @@ import { VIDEO_BG } from "./ui/home/VideoBackgrounds";
 /* INTAKE */
 import Intake from "./ui/home/Intake";
 
-/* REFLECTION */
-import Reflection from "./ui/components/Reflection/Reflection";
 
 /* GENERATION */
 import Generation from "./ui/home/Generation";
@@ -1065,14 +1063,6 @@ export default function App() {
           />
         </div>
 
-        {/* Reflection bovenop */}
-        <Reflection
-          canFadeOut={generations.length > 0}
-          onFadeOutStart={() => {
-            // ⬅️ BELANGRIJK: generatie zichtbaar TIJDENS fade
-            setShowGeneration(true);
-          }}
-        />
       </>
     );
   }

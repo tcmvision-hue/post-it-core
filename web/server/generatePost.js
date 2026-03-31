@@ -199,6 +199,7 @@ async function enforceOutputLanguage({ client, post, outputLanguage }) {
   return corrected;
 }
 
+
 export async function generatePost({
   kladblok,
   doelgroep,
@@ -251,35 +252,48 @@ export async function generatePost({
     : [];
 
   let post = "";
-  for (let attempt = 1; attempt <= MAX_SIMILARITY_ATTEMPTS; attempt += 1) {
-    post = await generateCandidate({
-      client,
-      kladblok,
-      doelgroep,
-      intentie,
-      context,
-      keywords,
-      postNumber,
-      generationIndex,
-      languageGuide,
-      detectedInputLanguage,
-      strictLanguageRule,
-      effectiveOutputLanguage,
-      priorVariants: previous,
-      attempt,
-    });
-
-    if (!isTooSimilar(post, previous)) {
+  let languageValid = false;
+  let lastError = null;
+  for (let languageAttempt = 1; languageAttempt <= 3; languageAttempt += 1) {
+    // Genereer post (met anti-similariteit)
+    for (let attempt = 1; attempt <= MAX_SIMILARITY_ATTEMPTS; attempt += 1) {
+      post = await generateCandidate({
+        client,
+        kladblok,
+        doelgroep,
+        intentie,
+        context,
+        keywords,
+        postNumber,
+        generationIndex,
+        languageGuide,
+        detectedInputLanguage,
+        strictLanguageRule,
+        effectiveOutputLanguage,
+        priorVariants: previous,
+        attempt,
+      });
+      if (!isTooSimilar(post, previous)) {
+        break;
+      }
+    }
+    // Valideer taal
+    if (isLikelyLanguage(post, effectiveOutputLanguage)) {
+      languageValid = true;
       break;
+    } else {
+      lastError = `Taal mismatch: verwacht ${effectiveOutputLanguage}`;
     }
   }
-
+  if (!languageValid) {
+    throw new Error(lastError || "Kon taal niet valideren");
+  }
+  // Extra correctie stap (zoals voorheen)
   post = await enforceOutputLanguage({
     client,
     post,
     outputLanguage: effectiveOutputLanguage,
   });
-
   return {
     post,
   };

@@ -1,3 +1,10 @@
+  // Fallback: als er geen varianten zijn en niet aan het laden, probeer alsnog te genereren
+  useEffect(() => {
+    if (generationCount === 0 && !loading && !confirming) {
+      runGeneration();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generationCount, loading, confirming]);
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../utils/api";
 import { getUser } from "../../utils/user";
@@ -45,11 +52,6 @@ export default function Generation({
     setServerGenerationCount((previous) => Math.max(previous, generationCount));
   }, [generationCount]);
 
-  // Auto-start eerste generatie
-  useEffect(() => {
-    if (generationCount === 0) runGeneration();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function resolveCycleId(userId) {
     const currentCycleId = String(cycleId || "").trim();
@@ -142,13 +144,21 @@ export default function Generation({
           : statusGenerationCount + 1;
         setServerGenerationCount(normalizedNextCount);
         onServerGenerationSync?.(normalizedNextCount);
-
-        const generatedPost = {
-          text: data.post,
-          postId: data.postId,
-          confirmed: Boolean(data.confirmed),
-          coinsRemaining: data.coinsRemaining,
-          label: keywords.trim(),
+        // Fallback: veilige, single-run trigger
+        const hasTriggeredFallback = useRef(false);
+        useEffect(() => {
+          if (
+            phase === PHASES.GENERATION &&
+            Array.isArray(variants) &&
+            variants.length === 0 &&
+            !loading &&
+            !hasTriggeredFallback.current
+          ) {
+            hasTriggeredFallback.current = true;
+            runGeneration();
+          }
+        }, [phase, variants, loading]);
+          import { useEffect, useState, useRef } from "react";
           accent: keywords.trim(),
           kind: statusGenerationCount === 0 ? "official" : "generation",
         };
