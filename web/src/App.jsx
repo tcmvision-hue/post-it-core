@@ -228,207 +228,16 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
 
-    const user = getUser();
-    const payload = {
-      profileId: user.id,
-      language: outputLanguage,
-    };
 
-    apiFetch("/api/profile/bootstrap", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (cancelled || !response.ok || !data?.ok || !data?.profile) return;
-        const serverLanguage = String(data.profile.primary_language || "").trim();
-        if (!serverLanguage) return;
-        const normalizedServerLanguage = normalizeStartupOutputLanguage(serverLanguage);
-        if (normalizedServerLanguage !== outputLanguage) {
-          setOutputLanguage(normalizedServerLanguage);
-          storeOutputLanguage(normalizedServerLanguage);
-        }
-        if (shouldPromptLanguage) {
-          const nextUiLanguage = APP_UI_LANGUAGES.includes(normalizedServerLanguage)
-            ? normalizedServerLanguage
-            : (APP_UI_LANGUAGES.includes(lang) ? lang : detectedLocalLang);
-          confirmLanguageChoice(nextUiLanguage || "nl");
-        }
-      })
-      .catch(() => {
-        // profiel bootstrap probeert opnieuw op volgende call
-      });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    lang,
-    outputLanguage,
-    setLang,
-    shouldPromptLanguage,
-    confirmLanguageChoice,
-    detectedLocalLang,
-  ]);
-
-  useEffect(() => {
-    if (phase === PHASES.EXPLANATION) {
-      primeTodayVideoStartFrame();
-    }
-  }, [phase]);
 
   // ⬇️ Alleen visuele timing
   const [showGeneration, setShowGeneration] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const returnTo = params.get("return");
-    if (returnTo !== "packages") return;
 
-    try {
-      const raw = window.sessionStorage.getItem("post_it_packages_return_context");
-      if (!raw) {
-        setPhase(PHASES.COINS);
-        return;
-      }
 
-      const parsed = JSON.parse(raw);
-      const restoredPost = typeof parsed?.post === "string" ? parsed.post.trim() : "";
-      if (!restoredPost) {
-        setPhase(PHASES.COINS);
-        return;
-      }
 
-      const restoredVariant = createVariant(
-        {
-          text: restoredPost,
-          label: "Origineel",
-          accent: "Origineel",
-          kind: "official",
-        },
-        "original"
-      );
-
-      const restoredHashtags = Array.isArray(parsed?.hashtags)
-        ? parsed.hashtags
-          .filter((entry) => typeof entry === "string" && entry.trim())
-          .map((entry) => ({ tag: entry.trim(), selected: true }))
-        : [];
-
-      setVariants([restoredVariant]);
-      setSelectedVariantId(restoredVariant.id);
-      setHashtags(restoredHashtags);
-      setPhase(PHASES.PACKAGES);
-    } catch {
-      setPhase(PHASES.COINS);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isDownloadRoute) return;
-
-    let cancelled = false;
-
-    async function restoreFromStatus() {
-      try {
-        const user = getUser();
-        const response = await apiFetch("/api/phase4/status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id }),
-        });
-        const data = await response.json().catch(() => ({}));
-        if (cancelled || !response.ok || !data?.ok) return;
-
-        const cycleIdFromStatus = String(data?.cycleId || "").trim();
-        const confirmedPostId = String(data?.confirmedPostId || "").trim();
-        const activePostId = String(data?.activePostId || confirmedPostId || "").trim();
-
-        if (cycleIdFromStatus) {
-          setActiveCycleId(cycleIdFromStatus);
-        }
-
-        const statusItems = Array.isArray(data?.variants)
-          ? data.variants.filter((entry) => entry && typeof entry === "object")
-          : [];
-        const generationItems = statusItems
-          .filter((entry) => Boolean(entry?.isGeneration))
-          .sort((a, b) => {
-            const ai = Number(a?.generationIndex) || 0;
-            const bi = Number(b?.generationIndex) || 0;
-            return ai - bi;
-          });
-
-        const restoredGenerations = generationItems
-          .map((entry, index) => buildGenerationFromStatusItem(entry, index))
-          .filter(Boolean)
-          .slice(0, 3);
-
-        if (restoredGenerations.length > 0) {
-          setGenerations(restoredGenerations);
-        }
-
-        const restoredVariants = statusItems
-          .map((entry, index) => buildVariantFromStatusItem(entry, index))
-          .filter(Boolean);
-
-        if (restoredVariants.length > 0) {
-          setVariants(restoredVariants);
-          const activeVariant = restoredVariants.find((variant) => String(variant.postId || "") === activePostId);
-          setSelectedVariantId(activeVariant?.id || restoredVariants[0].id);
-        }
-
-        setPostLifecycle((prev) => ({
-          ...prev,
-          id: confirmedPostId || prev.id || "",
-          activeId: activePostId || prev.activeId || "",
-          confirmed: Boolean(data?.confirmed),
-          status: data?.confirmed ? "confirmed" : prev.status,
-          coinsRemaining: data?.coinsRemaining ?? data?.coinsLeft ?? data?.coins ?? prev.coinsRemaining,
-          error: "",
-        }));
-
-        const params = new URLSearchParams(window.location.search || "");
-        const returnTo = String(params.get("return") || "").trim().toLowerCase();
-        const shouldRespectReturnRoute = returnTo === "packages" || returnTo === "coins";
-        if (shouldRespectReturnRoute) return;
-
-        const hasIntake = Boolean(intake?.kladblok || intake?.doelgroep || intake?.intentie || intake?.context);
-
-        if (data?.confirmed) {
-          setPhase(PHASES.FINAL);
-          return;
-        }
-
-        if (cycleIdFromStatus && hasIntake) {
-          setPhase(PHASES.GENERATION);
-          return;
-        }
-
-        if (hasIntake) {
-          // Intake is complete but cycle not started yet: resume at coins gate.
-          setPhase(PHASES.COINS);
-        }
-      } catch {
-        // restore is best effort
-      }
-    }
-
-    restoreFromStatus();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    intake,
-    isDownloadRoute,
-  ]);
 
   useEffect(() => {
     const noScrollPhases = [
@@ -660,16 +469,7 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    if (
-      phase === PHASES.COINS
-      || phase === PHASES.FINAL
-      || phase === PHASES.PACKAGES
-    ) {
-      syncLifecycleFromStatus();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+
 
   async function playShutterSound() {
     if (typeof window === "undefined") return;
