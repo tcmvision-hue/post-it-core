@@ -2,12 +2,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import OpenAI from "openai";
-import {
-  detectLanguageFromText,
-  isLikelyLanguage,
-  languageInstruction,
-  normalizeOutputLanguage,
-} from "./languageUtils.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,14 +103,56 @@ async function generateCandidate({
       .join("\n")}`
     : "";
 
+  // Gebruik alleen backend primary_language, veilige mapping, harde system prompt
+  const languageMap = {
+    nl: "Dutch",
+    en: "English",
+    de: "German",
+    fr: "French",
+    es: "Spanish"
+  };
+  const languageName = languageMap[primary_language] || "English";
   const response = await client.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: attempt >= 3 ? 0.8 : 0.6,
     messages: [
       {
         role: "system",
-        content:
-          "Je genereert exact één zakelijke social media post. Houd de kernboodschap inhoudelijk gelijk aan de input, maar schrijf elke variant duidelijk anders in stijl, opening, ritme en formulering. De varianten mogen niet op elkaar lijken in zinsbegin, volgorde of toon. Volg strikt de taalinstructie uit de user prompt. Als de outputtaal expliciet is opgegeven, gebruik uitsluitend die taal voor de volledige output. Geen uitleg, geen vragen, geen emojis, geen hashtags, geen CTA.",
+        content: `
+CRITICAL RULE:
+The entire output MUST be written ONLY in ${languageName}.
+Any use of another language is strictly forbidden and invalid.
+
+Think and write as a native ${languageName} writer.
+Do not translate. Do not mix languages.
+
+---
+
+TASK:
+
+Generate exactly ONE professional social media post.
+
+Keep the core message identical to the input.
+Rewrite the post so that it is clearly different in:
+
+* opening sentence
+* structure
+* rhythm
+* wording
+
+Each version must be distinctly different from previous ones.
+
+---
+
+STRICT RULES:
+
+* Output ONLY the post text
+* No explanations
+* No questions
+* No emojis
+* No hashtags
+* No call-to-action
+`
       },
       {
         role: "user",
@@ -123,8 +160,6 @@ async function generateCandidate({
 Post nummer vandaag: ${postNumber}
 Generation index binnen cyclus: ${generationIndex}
 Variant-richting: ${variantGuide}
-Taalinstructie: ${languageGuide}
-${strictLanguageRule ? `Taalregel: ${strictLanguageRule}` : ""}
 ${attemptInstruction}
 ${priorVariantsBlock}
 Kladblok: ${kladblok}
@@ -144,60 +179,9 @@ Eisen:
     ],
   });
 
-  let post = response.choices[0].message.content.trim();
-
-  if (effectiveOutputLanguage !== "auto") {
-    const retry = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.25,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Je corrigeert exact één zakelijke social media post naar de gevraagde taal. Behoud de betekenis. Geen uitleg, geen vragen, geen emojis, geen hashtags, geen CTA.",
-        },
-        {
-          role: "user",
-          content: `Corrigeer deze post nu strikt naar deze taal: ${languageInstruction(effectiveOutputLanguage)}\n\nHarde regel: geef alleen de posttekst terug in exact die taal, zonder gemixte taal.\n\nOutput:\n${post}`,
-        },
-      ],
-    });
-    post = retry.choices[0]?.message?.content?.trim() || post;
-  }
-
-  return post;
+  return response.choices[0].message.content.trim();
 }
 
-async function enforceOutputLanguage({ client, post, outputLanguage }) {
-  const normalized = normalizeOutputLanguage(outputLanguage, "en");
-  let corrected = String(post || "").trim();
-  if (!corrected) return corrected;
-
-  for (let attempt = 0; attempt < MAX_LANGUAGE_CORRECTION_ATTEMPTS; attempt += 1) {
-    if (isLikelyLanguage(corrected, normalized)) {
-      return corrected;
-    }
-
-    const retry = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.1,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Je corrigeert exact één zakelijke social media post naar de gevraagde taal. Behoud de betekenis. Geen uitleg, geen vragen, geen emojis, geen hashtags, geen CTA.",
-        },
-        {
-          role: "user",
-          content: `Corrigeer deze post nu strikt naar deze taal: ${languageInstruction(normalized)}\n\nHarde regel: geef alleen de posttekst terug in exact die taal, zonder gemixte taal.\n\nOutput:\n${corrected}`,
-        },
-      ],
-    });
-    corrected = retry.choices[0]?.message?.content?.trim() || corrected;
-  }
-
-  return corrected;
-}
 
 
 export async function generatePost({
@@ -212,88 +196,38 @@ export async function generatePost({
   priorVariants = [],
 }) {
   const client = getOpenAIClient();
-
-  const requestedOutputLanguage = normalizeOutputLanguage(outputLanguage, "en");
-  const detectedInputLanguage = detectLanguageFromText(kladblok);
-  const effectiveOutputLanguage = requestedOutputLanguage === "auto"
-    ? "en"
-    : requestedOutputLanguage;
-
-  const languageGuide = languageInstruction(effectiveOutputLanguage);
-
-  const strictLanguageRule = {
-    auto: "",
-    nl: "Harde eis: de complete output MOET in Nederlands zijn.",
-    en: "Hard requirement: output MUST be fully in English.",
-    pl: "Wymóg twardy: cały wynik MUSI być po polsku.",
-    es: "Requisito estricto: toda la salida DEBE estar en español.",
-    fr: "Exigence stricte : toute la sortie DOIT être en français.",
-    de: "Strikte Vorgabe: Die gesamte Ausgabe MUSS auf Deutsch sein.",
-    pt: "Exigência rígida: toda a saída DEVE estar em português.",
-    it: "Requisito rigido: l'output DEVE essere interamente in italiano.",
-    ar: "شرط صارم: يجب أن يكون الناتج كله باللغة العربية.",
-    zh: "硬性要求：输出内容必须全部为中文。",
-    ja: "厳格要件：出力は必ず全文日本語にすること。",
-    he: "דרישה קשיחה: כל הפלט חייב להיות בעברית.",
-    af: "Harde vereiste: die hele uitset MOET in Afrikaans wees.",
-    sw: "Sharti kali: matokeo yote LAZIMA yawe kwa Kiswahili.",
-    am: "ጠንካራ መስፈርት፡ ውጤቱ ሙሉ በሙሉ በአማርኛ መሆን አለበት።",
-    ha: "Sharadi mai tsauri: duk sakamakon dole ya kasance cikin Hausa.",
-    yo: "Ìlànà líle: gbogbo ìdáhùn gbọ́dọ̀ jẹ́ ní èdè Yorùbá.",
-    zu: "Imfuneko eqinile: konke okukhiphayo KUMELE kube ngesiZulu.",
-    "srn-nl": "Harde eis: output in Surinaams-Nederlands (natuurlijk en respectvol).",
-    "straat-nl": "Harde eis: output in Nederlandse straattaal (natuurlijk en respectvol).",
-  }[effectiveOutputLanguage] || "";
-
+  const languageMap = {
+    nl: "Dutch",
+    en: "English",
+    de: "German",
+    fr: "French",
+    es: "Spanish"
+  };
+  const safeLanguage = languageMap[primary_language] || "English";
   const previous = Array.isArray(priorVariants)
     ? priorVariants
       .filter((item) => typeof item === "string" && item.trim().length > 0)
       .slice(-8)
     : [];
-
   let post = "";
-  let languageValid = false;
-  let lastError = null;
-  for (let languageAttempt = 1; languageAttempt <= 3; languageAttempt += 1) {
-    // Genereer post (met anti-similariteit)
-    for (let attempt = 1; attempt <= MAX_SIMILARITY_ATTEMPTS; attempt += 1) {
-      post = await generateCandidate({
-        client,
-        kladblok,
-        doelgroep,
-        intentie,
-        context,
-        keywords,
-        postNumber,
-        generationIndex,
-        languageGuide,
-        detectedInputLanguage,
-        strictLanguageRule,
-        effectiveOutputLanguage,
-        priorVariants: previous,
-        attempt,
-      });
-      if (!isTooSimilar(post, previous)) {
-        break;
-      }
-    }
-    // Valideer taal
-    if (isLikelyLanguage(post, effectiveOutputLanguage)) {
-      languageValid = true;
+  for (let attempt = 1; attempt <= MAX_SIMILARITY_ATTEMPTS; attempt += 1) {
+    post = await generateCandidate({
+      client,
+      kladblok,
+      doelgroep,
+      intentie,
+      context,
+      keywords,
+      postNumber,
+      generationIndex,
+      primary_language,
+      priorVariants: previous,
+      attempt,
+    });
+    if (!isTooSimilar(post, previous)) {
       break;
-    } else {
-      lastError = `Taal mismatch: verwacht ${effectiveOutputLanguage}`;
     }
   }
-  if (!languageValid) {
-    throw new Error(lastError || "Kon taal niet valideren");
-  }
-  // Extra correctie stap (zoals voorheen)
-  post = await enforceOutputLanguage({
-    client,
-    post,
-    outputLanguage: effectiveOutputLanguage,
-  });
   return {
     post,
   };
